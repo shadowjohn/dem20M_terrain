@@ -1,0 +1,32 @@
+[
+  {
+    "id": "taichung",
+    "name": "臺中市",
+    "zipName": "taichung-20mdem-2025.zip",
+    "url": "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/ef57682a-4ec6-45a5-a265-a4dda08e6f7f/分幅_臺中市20MDEM(2025).zip",
+    "sourceSrs": "EPSG:3826",
+    "targetSrs": "EPSG:4326",
+    "outputDir": "output/taichung",
+    "expectedBytes": 38501281
+  },
+  {
+    "id": "taoyuan",
+    "name": "桃園市",
+    "zipName": "taoyuan-20mdem-2025.zip",
+    "url": "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/ba0fcc26-f82e-4345-bfc4-4785574d9014/分幅_桃園市20MDEM(2025).zip",
+    "sourceSrs": "EPSG:3826",
+    "targetSrs": "EPSG:4326",
+    "outputDir": "output/taoyuan",
+    "expectedBytes": 20272123
+  },
+  {
+    "id": "newtaipei",
+    "name": "新北市",
+    "zipName": "newtaipei-20mdem-2025.zip",
+    "url": "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/9574dbb5-ca32-4ea3-aaf7-a9f582b9357b/分幅_新北市20MDEM(2025).zip",
+    "sourceSrs": "EPSG:3826",
+    "targetSrs": "EPSG:4326",
+    "outputDir": "output/newtaipei",
+    "expectedBytes": 36525419
+  }
+]

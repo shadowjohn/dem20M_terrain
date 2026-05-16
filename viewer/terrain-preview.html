@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>20M Terrain Preview</title>
+  <script>
+    window.CESIUM_BASE_URL = "https://3dmap.focusit.com.tw/easymap_data/Cesium-1.120/build/Cesium/";
+  </script>
+  <link rel="stylesheet" href="https://3dmap.focusit.com.tw/easymap_data/Cesium-1.120/build/Cesium/Widgets/widgets.css">
+  <script src="https://3dmap.focusit.com.tw/easymap_data/Cesium-1.120/build/Cesium/Cesium.js"></script>
+  <style>
+    html,
+    body,
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      font-family: Arial, "Microsoft JhengHei", sans-serif;
+    }
+
+    .toolbar {
+      position: absolute;
+      z-index: 2;
+      top: 12px;
+      left: 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      color: #f7fbff;
+      background: rgba(12, 18, 24, 0.86);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+    }
+
+    select,
+    button {
+      height: 32px;
+    }
+
+    .status {
+      min-width: 220px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <div class="toolbar">
+    <select id="terrainSelect" aria-label="terrain">
+      <option value="taichung">台中</option>
+      <option value="taoyuan">桃園</option>
+      <option value="newtaipei">新北</option>
+    </select>
+    <button id="reloadTerrain" type="button">載入地形</button>
+    <span id="status" class="status">等待載入 terrain</span>
+  </div>
+
+  <script>
+    const TERRAIN_OPTIONS = {
+      taichung: {
+        url: "terrain/taichung",
+        label: "台中",
+        camera: [120.67, 24.16, 68000],
+      },
+      taoyuan: {
+        url: "terrain/taoyuan",
+        label: "桃園",
+        camera: [121.22, 24.98, 76000],
+      },
+      newtaipei: {
+        url: "terrain/newtaipei",
+        label: "新北",
+        camera: [121.55, 25.05, 90000],
+      },
+    };
+
+    let viewer;
+
+    function setStatus(message, isError) {
+      const el = document.getElementById("status");
+      el.textContent = message;
+      el.style.color = isError ? "#ffb4a8" : "#d8f8ff";
+    }
+
+    async function loadTerrain(id) {
+      const option = TERRAIN_OPTIONS[id];
+      if (!option) {
+        setStatus("未知 terrain", true);
+        return;
+      }
+
+      try {
+        viewer.terrainProvider = await Cesium.CesiumTerrainProvider.fromUrl(option.url, {
+          requestVertexNormals: true,
+        });
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(option.camera[0], option.camera[1], option.camera[2]),
+          orientation: {
+            heading: 0,
+            pitch: Cesium.Math.toRadians(-62),
+            roll: 0,
+          },
+          duration: 0.8,
+        });
+        setStatus(`${option.label} terrain 已載入`);
+      } catch (error) {
+        console.error(error);
+        setStatus(`${option.label} terrain 載入失敗，請檢查 layer.json / .terrain`, true);
+      }
+    }
+
+    function init() {
+      viewer = new Cesium.Viewer("cesiumContainer", {
+        animation: false,
+        baseLayerPicker: false,
+        fullscreenButton: false,
+        geocoder: false,
+        homeButton: false,
+        sceneModePicker: false,
+        timeline: false,
+        navigationHelpButton: false,
+        terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+      });
+      viewer.scene.globe.depthTestAgainstTerrain = true;
+      document.getElementById("reloadTerrain").addEventListener("click", () => {
+        loadTerrain(document.getElementById("terrainSelect").value);
+      });
+      document.getElementById("terrainSelect").addEventListener("change", (event) => {
+        loadTerrain(event.target.value);
+      });
+      loadTerrain("taichung");
+    }
+
+    init();
+  </script>
+</body>
+</html>
