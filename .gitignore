@@ -1,0 +1,26 @@
+# 大型來源資料與中繼成果不要進版控
+data/raw/
+data/work/
+output/
+logs/
+
+# DEM / terrain 大檔
+*.zip
+*.7z
+*.rar
+*.tif
+*.tiff
+*.vrt
+*.asc
+*.gdr
+*.grd
+*.terrain
+*.terrain.gz
+
+# 本機執行暫存
+.cache/
+.tmp/
+*.log
+
+# Node 測試環境
+node_modules/
