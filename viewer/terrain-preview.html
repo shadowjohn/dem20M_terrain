@@ -48,31 +48,117 @@
 <body>
   <div id="cesiumContainer"></div>
   <div class="toolbar">
-    <select id="terrainSelect" aria-label="terrain">
-      <option value="taichung">台中</option>
-      <option value="taoyuan">桃園</option>
-      <option value="newtaipei">新北</option>
-    </select>
+    <select id="terrainSelect" aria-label="terrain"></select>
     <button id="reloadTerrain" type="button">載入地形</button>
     <span id="status" class="status">等待載入 terrain</span>
   </div>
 
   <script>
     const TERRAIN_OPTIONS = {
-      taichung: {
-        url: "terrain/taichung",
-        label: "台中",
-        camera: [120.67, 24.16, 68000],
+      keelung: {
+        url: "terrain/keelung",
+        label: "基隆",
+        camera: [121.74, 25.13, 36000],
+      },
+      taipei: {
+        url: "terrain/taipei",
+        label: "台北",
+        camera: [121.56, 25.05, 52000],
+      },
+      newtaipei: {
+        url: "terrain/newtaipei",
+        label: "新北",
+        camera: [121.55, 25.05, 90000],
       },
       taoyuan: {
         url: "terrain/taoyuan",
         label: "桃園",
         camera: [121.22, 24.98, 76000],
       },
-      newtaipei: {
-        url: "terrain/newtaipei",
-        label: "新北",
-        camera: [121.55, 25.05, 90000],
+      hsinchu_county: {
+        url: "terrain/hsinchu_county",
+        label: "新竹縣",
+        camera: [121.12, 24.71, 76000],
+      },
+      hsinchu_city: {
+        url: "terrain/hsinchu_city",
+        label: "新竹市",
+        camera: [120.97, 24.81, 38000],
+      },
+      miaoli: {
+        url: "terrain/miaoli",
+        label: "苗栗",
+        camera: [120.82, 24.56, 76000],
+      },
+      taichung: {
+        url: "terrain/taichung",
+        label: "台中",
+        camera: [120.67, 24.16, 68000],
+      },
+      changhua: {
+        url: "terrain/changhua",
+        label: "彰化",
+        camera: [120.54, 24.07, 62000],
+      },
+      nantou: {
+        url: "terrain/nantou",
+        label: "南投",
+        camera: [120.99, 23.84, 105000],
+      },
+      yunlin: {
+        url: "terrain/yunlin",
+        label: "雲林",
+        camera: [120.39, 23.71, 70000],
+      },
+      chiayi_county: {
+        url: "terrain/chiayi_county",
+        label: "嘉義縣",
+        camera: [120.57, 23.46, 76000],
+      },
+      chiayi_city: {
+        url: "terrain/chiayi_city",
+        label: "嘉義市",
+        camera: [120.45, 23.48, 36000],
+      },
+      tainan: {
+        url: "terrain/tainan",
+        label: "台南",
+        camera: [120.31, 23.14, 82000],
+      },
+      kaohsiung: {
+        url: "terrain/kaohsiung",
+        label: "高雄",
+        camera: [120.67, 23.01, 108000],
+      },
+      pingtung: {
+        url: "terrain/pingtung",
+        label: "屏東",
+        camera: [120.62, 22.55, 102000],
+      },
+      yilan: {
+        url: "terrain/yilan",
+        label: "宜蘭",
+        camera: [121.72, 24.69, 82000],
+      },
+      hualien: {
+        url: "terrain/hualien",
+        label: "花蓮",
+        camera: [121.35, 23.75, 135000],
+      },
+      taitung: {
+        url: "terrain/taitung",
+        label: "台東",
+        camera: [121.05, 22.76, 118000],
+      },
+      penghu: {
+        url: "terrain/penghu",
+        label: "澎湖",
+        camera: [119.58, 23.57, 62000],
+      },
+      kinmen: {
+        url: "terrain/kinmen",
+        label: "金門",
+        camera: [118.38, 24.45, 42000],
       },
     };
 
@@ -111,6 +197,17 @@
       }
     }
 
+    function populateTerrainSelect() {
+      const select = document.getElementById("terrainSelect");
+      for (const [id, option] of Object.entries(TERRAIN_OPTIONS)) {
+        const item = document.createElement("option");
+        item.value = id;
+        item.textContent = option.label;
+        select.appendChild(item);
+      }
+      select.value = "taichung";
+    }
+
     function init() {
       viewer = new Cesium.Viewer("cesiumContainer", {
         animation: false,
@@ -124,6 +221,7 @@
         terrainProvider: new Cesium.EllipsoidTerrainProvider(),
       });
       viewer.scene.globe.depthTestAgainstTerrain = true;
+      populateTerrainSelect();
       document.getElementById("reloadTerrain").addEventListener("click", () => {
         loadTerrain(document.getElementById("terrainSelect").value);
       });

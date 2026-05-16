@@ -1,7 +1,6 @@
 #requires -Version 7.0
 [CmdletBinding()]
 param(
-    [ValidateSet("taichung", "taoyuan", "newtaipei")]
     [string[]] $County,
 
     [switch] $All,
@@ -9,10 +8,12 @@ param(
     [switch] $SkipDownload,
     [switch] $SkipDockerPull,
     [switch] $ForceRebuild,
+    [switch] $SkipFillNoData,
 
     [string] $DockerImage = "ghcr.io/tum-gis/ctb-quantized-mesh:latest",
     [int] $CommandTimeoutSec = 7200,
-    [int] $DownloadRetry = 3
+    [int] $DownloadRetry = 3,
+    [int] $FillDistancePixels = 5
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,7 +38,8 @@ function Write-Log {
     param([Parameter(Mandatory)][string] $Message)
     New-Directory -Path $LogDir
     $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
-    $line | Tee-Object -FilePath $LogPath -Append
+    Add-Content -LiteralPath $LogPath -Value $line -Encoding utf8
+    Write-Host $line
 }
 
 function Get-RequiredCommand {
@@ -53,18 +55,28 @@ function Invoke-ExternalCommand {
     param(
         [Parameter(Mandatory)][string] $FilePath,
         [Parameter(Mandatory)][string[]] $ArgumentList,
-        [int] $TimeoutSec = $CommandTimeoutSec
+        [int] $TimeoutSec = $CommandTimeoutSec,
+        [string] $ProgressMessage = "",
+        [int] $HeartbeatSec = 30
     )
 
+    if ($ProgressMessage) {
+        Write-Log "$ProgressMessage 開始"
+    }
     Write-Log ("[CMD] {0} {1}" -f $FilePath, ($ArgumentList -join " "))
 
     $stdoutPath = [System.IO.Path]::GetTempFileName()
     $stderrPath = [System.IO.Path]::GetTempFileName()
     $process = Start-Process -FilePath $FilePath -ArgumentList $ArgumentList -NoNewWindow -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
     $timer = [System.Diagnostics.Stopwatch]::StartNew()
+    $lastHeartbeatSec = 0
 
     while (-not $process.HasExited) {
         Start-Sleep -Seconds 5
+        if ($ProgressMessage -and $HeartbeatSec -gt 0 -and $timer.Elapsed.TotalSeconds -ge ($lastHeartbeatSec + $HeartbeatSec)) {
+            $lastHeartbeatSec = [int]$timer.Elapsed.TotalSeconds
+            Write-Log ("{0} 指令執行中 {1:n0} 秒..." -f $ProgressMessage, $timer.Elapsed.TotalSeconds)
+        }
         if ($TimeoutSec -gt 0 -and $timer.Elapsed.TotalSeconds -gt $TimeoutSec) {
             try {
                 $process.Kill()
@@ -87,6 +99,9 @@ function Invoke-ExternalCommand {
     }
     if ($process.ExitCode -ne 0) {
         throw "指令執行失敗，exit code=$($process.ExitCode)：$FilePath"
+    }
+    if ($ProgressMessage) {
+        Write-Log ("{0} 完成，耗時 {1:n0} 秒" -f $ProgressMessage, $timer.Elapsed.TotalSeconds)
     }
 }
 
@@ -142,6 +157,34 @@ function Get-DockerVersionText {
     } catch {
         return "docker version unavailable"
     }
+}
+
+function Assert-DockerDaemon {
+    $docker = Get-RequiredCommand -Name "docker"
+    try {
+        Write-Log "Docker daemon 檢查：docker version"
+        Invoke-ExternalCommand -FilePath $docker -ArgumentList @("version") -TimeoutSec 30 -ProgressMessage "Docker daemon 檢查" -HeartbeatSec 0
+    } catch {
+        throw "Docker Desktop daemon 尚未啟動，請先啟動 Docker Desktop，等 engine running 後重跑。原始錯誤：$($_.Exception.Message)"
+    }
+}
+
+function Get-GdalPythonCommand {
+    $gdalInfo = Get-RequiredCommand -Name "gdalinfo"
+    $gdalDir = Split-Path -Parent $gdalInfo
+    $ms4wRoot = Split-Path -Parent $gdalDir
+    $ms4wPython = Join-Path (Join-Path $ms4wRoot "python") "python.exe"
+
+    if (Test-Path -LiteralPath $ms4wPython) {
+        return $ms4wPython
+    }
+
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        return $python.Source
+    }
+
+    throw "找不到可執行的 Python，無法執行 GDAL FillNodata"
 }
 
 function Add-HistoryEntry {
@@ -218,18 +261,24 @@ function Normalize-TerrainTiles {
     param([Parameter(Mandatory)][string] $OutputPath)
 
     $gzFiles = Get-ChildItem -LiteralPath $OutputPath -Recurse -File -Filter "*.terrain.gz" -ErrorAction SilentlyContinue
+    $gzTotal = @($gzFiles).Count
+    $gzIndex = 0
     foreach ($gz in $gzFiles) {
+        $gzIndex++
         $target = $gz.FullName -replace "\.gz$", ""
-        Write-Log "解壓 terrain.gz：$($gz.FullName)"
+        Write-Log ("[8/8] terrain.gz 解壓 [{0}/{1}] {2}" -f $gzIndex, $gzTotal, $gz.FullName)
         Expand-GZipFile -SourcePath $gz.FullName -TargetPath $target
         Remove-Item -LiteralPath $gz.FullName -Force
     }
 
     $terrainFiles = Get-ChildItem -LiteralPath $OutputPath -Recurse -File -Filter "*.terrain" -ErrorAction SilentlyContinue
+    $terrainTotal = @($terrainFiles).Count
+    $terrainIndex = 0
     foreach ($terrain in $terrainFiles) {
+        $terrainIndex++
         if (Test-GZipFile -Path $terrain.FullName) {
             $tmp = "$($terrain.FullName).tmp"
-            Write-Log "將 gzip 內容正規化成未壓縮 .terrain：$($terrain.FullName)"
+            Write-Log ("[8/8] gzip 內容正規化 [{0}/{1}] {2}" -f $terrainIndex, $terrainTotal, $terrain.FullName)
             Expand-GZipFile -SourcePath $terrain.FullName -TargetPath $tmp
             Move-Item -LiteralPath $tmp -Destination $terrain.FullName -Force
         }
@@ -245,6 +294,99 @@ function Get-SourceFiles {
     return @($files | Sort-Object FullName -Unique)
 }
 
+function Get-MinPositiveStep {
+    param(
+        [Parameter(Mandatory)][int[]] $Values,
+        [int] $DefaultStep = 20
+    )
+
+    $sortedValues = @($Values | Sort-Object -Unique)
+    $step = $null
+    for ($i = 1; $i -lt $sortedValues.Count; $i++) {
+        $diff = $sortedValues[$i] - $sortedValues[$i - 1]
+        if ($diff -gt 0 -and ($null -eq $step -or $diff -lt $step)) {
+            $step = $diff
+        }
+    }
+
+    if ($null -eq $step) {
+        return $DefaultStep
+    }
+    return $step
+}
+
+function Convert-SparseXyzToCompleteXyz {
+    param(
+        [Parameter(Mandatory)][string] $SourcePath,
+        [Parameter(Mandatory)][string] $TargetPath,
+        [string] $NodataValue = "-32768"
+    )
+
+    $points = [System.Collections.Generic.Dictionary[string, string]]::new()
+    $xValues = [System.Collections.Generic.HashSet[int]]::new()
+    $yValues = [System.Collections.Generic.HashSet[int]]::new()
+
+    foreach ($line in Get-Content -LiteralPath $SourcePath) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed) {
+            continue
+        }
+
+        $parts = $trimmed -split "\s+"
+        if ($parts.Count -lt 3) {
+            continue
+        }
+
+        $x = [int]$parts[0]
+        $y = [int]$parts[1]
+        $z = $parts[2]
+        $points["$x,$y"] = $z
+        [void]$xValues.Add($x)
+        [void]$yValues.Add($y)
+    }
+
+    if ($points.Count -lt 1) {
+        throw "稀疏 XYZ 沒有可用點：$SourcePath"
+    }
+
+    $minX = [int](($xValues | Measure-Object -Minimum).Minimum)
+    $maxX = [int](($xValues | Measure-Object -Maximum).Maximum)
+    $minY = [int](($yValues | Measure-Object -Minimum).Minimum)
+    $maxY = [int](($yValues | Measure-Object -Maximum).Maximum)
+    $stepX = Get-MinPositiveStep -Values @($xValues)
+    $stepY = Get-MinPositiveStep -Values @($yValues)
+
+    New-Directory -Path (Split-Path -Parent $TargetPath)
+    Write-Log "補齊稀疏 XYZ：$SourcePath => $TargetPath"
+
+    $writer = [System.IO.StreamWriter]::new($TargetPath, $false, [System.Text.UTF8Encoding]::new($false))
+    try {
+        for ($y = $minY; $y -le $maxY; $y += $stepY) {
+            for ($x = $minX; $x -le $maxX; $x += $stepX) {
+                $key = "$x,$y"
+                $z = if ($points.ContainsKey($key)) { $points[$key] } else { $NodataValue }
+                $writer.WriteLine("$x $y $z")
+            }
+        }
+    } finally {
+        $writer.Dispose()
+    }
+}
+
+function Test-PositiveNsResolution {
+    param([Parameter(Mandatory)] $SourceFile)
+
+    $gdalInfo = Get-RequiredCommand -Name "gdalinfo"
+    $infoText = (& $gdalInfo $SourceFile.FullName 2>&1) -join "`n"
+    $pixelSizeMatch = [regex]::Match($infoText, "Pixel Size = \(\s*(?<x>[-0-9.]+)\s*,\s*(?<y>[-0-9.]+)\s*\)")
+    if (-not $pixelSizeMatch.Success) {
+        return $false
+    }
+
+    $pixelSizeY = [double]::Parse($pixelSizeMatch.Groups["y"].Value, [System.Globalization.CultureInfo]::InvariantCulture)
+    return ($pixelSizeY -gt 0)
+}
+
 function Build-SourceVrt {
     param(
         [Parameter(Mandatory)] $CountyConfig,
@@ -253,55 +395,149 @@ function Build-SourceVrt {
     )
 
     $gdalBuildVrt = Get-RequiredCommand -Name "gdalbuildvrt"
-    $gdalTranslate = Get-RequiredCommand -Name "gdal_translate"
+    $gdalWarp = Get-RequiredCommand -Name "gdalwarp"
     $sourceList = Join-Path $WorkPath "$($CountyConfig.id)-sources.txt"
     $sourceVrt = Join-Path $WorkPath "$($CountyConfig.id)-source.vrt"
 
     $SourceFiles.FullName | Set-Content -LiteralPath $sourceList -Encoding utf8
 
-    try {
-        Invoke-ExternalCommand -FilePath $gdalBuildVrt -ArgumentList @("-overwrite", "-a_srs", $CountyConfig.sourceSrs, "-input_file_list", $sourceList, $sourceVrt)
-        return $sourceVrt
-    } catch {
-        Write-Log "直接建立 VRT 失敗，改用 gdal_translate 逐檔轉 GeoTIFF：$($_.Exception.Message)"
+    $firstSource = @($SourceFiles | Select-Object -First 1)[0]
+    if (Test-PositiveNsResolution -SourceFile $firstSource) {
+        Write-Log "[5/8] $($CountyConfig.name) 偵測到 positive NS resolution，跳過直接 VRT，改用 gdalwarp 逐檔轉 northup GeoTIFF"
+    } else {
+        try {
+            Invoke-ExternalCommand -FilePath $gdalBuildVrt -ArgumentList @("-overwrite", "-a_srs", $CountyConfig.sourceSrs, "-input_file_list", $sourceList, $sourceVrt) -ProgressMessage "[5/8] $($CountyConfig.name) gdalbuildvrt 直接建立來源 VRT"
+            return $sourceVrt
+        } catch {
+            Write-Log "[5/8] $($CountyConfig.name) 直接建立 VRT 失敗，可能是 positive NS resolution，改用 gdalwarp 逐檔轉 northup GeoTIFF：$($_.Exception.Message)"
+        }
     }
 
-    $rasterizedPath = Join-Path $WorkPath "rasterized"
+    $rasterizedPath = Join-Path $WorkPath "northup"
     New-Directory -Path $rasterizedPath
     $converted = @()
+    $sourceTotal = @($SourceFiles).Count
+    $sourceIndex = 0
 
     foreach ($source in $SourceFiles) {
+        $sourceIndex++
+        $progressText = "[5/8] gdalwarp [{0}/{1}] {2}" -f $sourceIndex, $sourceTotal, $source.Name
         $target = Join-Path $rasterizedPath "$($source.BaseName).tif"
-        Invoke-ExternalCommand -FilePath $gdalTranslate -ArgumentList @("-of", "GTiff", "-a_srs", $CountyConfig.sourceSrs, $source.FullName, $target)
+        if ((Test-Path -LiteralPath $target) -and -not $ForceRebuild) {
+            Write-Log "$progressText GeoTIFF 已存在，跳過轉檔：$target"
+            $converted += Get-Item -LiteralPath $target
+            continue
+        }
+        if ((Test-Path -LiteralPath $target) -and $ForceRebuild) {
+            Remove-Item -LiteralPath $target -Force
+        }
+        Write-Log $progressText
+        try {
+            Invoke-ExternalCommand -FilePath $gdalWarp -ArgumentList @(
+                "-overwrite",
+                "-s_srs", $CountyConfig.sourceSrs,
+                "-t_srs", $CountyConfig.sourceSrs,
+                "-r", "near",
+                "-srcnodata", "-32768", "-dstnodata", "-32768",
+                "-of", "GTiff",
+                "-co", "TILED=YES",
+                "-co", "COMPRESS=LZW",
+                $source.FullName,
+                $target
+            )
+        } catch {
+            if (Test-Path -LiteralPath $target) {
+                Remove-Item -LiteralPath $target -Force
+            }
+            $completeXyz = Join-Path $rasterizedPath "$($source.BaseName)-complete.xyz"
+            Write-Log "$progressText 直接轉檔失敗，補齊稀疏 XYZ 後重試：$($_.Exception.Message)"
+            Convert-SparseXyzToCompleteXyz -SourcePath $source.FullName -TargetPath $completeXyz
+            Invoke-ExternalCommand -FilePath $gdalWarp -ArgumentList @(
+                "-overwrite",
+                "-s_srs", $CountyConfig.sourceSrs,
+                "-t_srs", $CountyConfig.sourceSrs,
+                "-r", "near",
+                "-srcnodata", "-32768", "-dstnodata", "-32768",
+                "-of", "GTiff",
+                "-co", "TILED=YES",
+                "-co", "COMPRESS=LZW",
+                $completeXyz,
+                $target
+            )
+        }
         $converted += Get-Item -LiteralPath $target
     }
 
     $convertedList = Join-Path $WorkPath "$($CountyConfig.id)-converted-sources.txt"
     $converted.FullName | Set-Content -LiteralPath $convertedList -Encoding utf8
-    Invoke-ExternalCommand -FilePath $gdalBuildVrt -ArgumentList @("-overwrite", "-a_srs", $CountyConfig.sourceSrs, "-input_file_list", $convertedList, $sourceVrt)
+    Invoke-ExternalCommand -FilePath $gdalBuildVrt -ArgumentList @("-overwrite", "-a_srs", $CountyConfig.sourceSrs, "-input_file_list", $convertedList, $sourceVrt) -ProgressMessage "[5/8] $($CountyConfig.name) gdalbuildvrt 建立轉檔後 VRT"
     return $sourceVrt
+}
+
+function Invoke-FillNoData {
+    param(
+        [Parameter(Mandatory)] $CountyConfig,
+        [Parameter(Mandatory)][string] $SourceRaster,
+        [Parameter(Mandatory)][string] $WorkPath
+    )
+
+    if ($SkipFillNoData -or $FillDistancePixels -le 0) {
+        Write-Log "[6/8] $($CountyConfig.name) 跳過 NoData 補洞"
+        return $SourceRaster
+    }
+
+    $filledRaster = Join-Path $WorkPath "$($CountyConfig.id)-filled.tif"
+    if ((Test-Path -LiteralPath $filledRaster) -and -not $ForceRebuild) {
+        Write-Log "[6/8] $($CountyConfig.name) 補洞 TIFF 已存在，跳過補洞：$filledRaster"
+        return $filledRaster
+    }
+    if ((Test-Path -LiteralPath $filledRaster) -and $ForceRebuild) {
+        Remove-Item -LiteralPath $filledRaster -Force
+    }
+
+    $python = Get-GdalPythonCommand
+    $fillScript = Join-Path $RepoRoot "tools/fill-nodata.py"
+    if (-not (Test-Path -LiteralPath $fillScript)) {
+        throw "找不到 NoData 補洞腳本：$fillScript"
+    }
+
+    Invoke-ExternalCommand -FilePath $python -ArgumentList @(
+        $fillScript,
+        "--source", $SourceRaster,
+        "--target", $filledRaster,
+        "--max-distance", ([string]$FillDistancePixels),
+        "--nodata", "-32768"
+    ) -ProgressMessage "[6/8] $($CountyConfig.name) 補齊小範圍 NoData"
+
+    return $filledRaster
 }
 
 function Build-Epsg4326Raster {
     param(
         [Parameter(Mandatory)] $CountyConfig,
-        [Parameter(Mandatory)][string] $SourceVrt,
+        [Parameter(Mandatory)][string] $SourceRaster,
         [Parameter(Mandatory)][string] $WorkPath
     )
 
     $gdalWarp = Get-RequiredCommand -Name "gdalwarp"
     $targetTif = Join-Path $WorkPath "$($CountyConfig.id)-4326.tif"
+    if ((Test-Path -LiteralPath $targetTif) -and -not $ForceRebuild) {
+        Write-Log "[6/8] $($CountyConfig.name) EPSG:4326 TIFF 已存在，跳過重投影：$targetTif"
+        return $targetTif
+    }
     Invoke-ExternalCommand -FilePath $gdalWarp -ArgumentList @(
         "-overwrite",
         "-t_srs", $CountyConfig.targetSrs,
         "-r", "bilinear",
+        "-srcnodata", "-32768",
+        "-dstnodata", "-32768",
         "-multi",
         "-wo", "NUM_THREADS=ALL_CPUS",
         "-co", "TILED=YES",
         "-co", "COMPRESS=LZW",
-        $SourceVrt,
+        $SourceRaster,
         $targetTif
-    )
+    ) -ProgressMessage "[6/8] $($CountyConfig.name) gdalwarp EPSG:4326"
     return $targetTif
 }
 
@@ -314,7 +550,7 @@ function Invoke-Ctb {
 
     $docker = Get-RequiredCommand -Name "docker"
     if (-not $SkipDockerPull) {
-        Invoke-ExternalCommand -FilePath $docker -ArgumentList @("pull", $DockerImage) -TimeoutSec 1800
+        Invoke-ExternalCommand -FilePath $docker -ArgumentList @("pull", $DockerImage) -TimeoutSec 1800 -ProgressMessage "[7/8] Docker pull $DockerImage"
     }
 
     $repoForDocker = ($RepoRoot -replace "\\", "/")
@@ -328,7 +564,7 @@ function Invoke-Ctb {
         "ctb-tile", "-f", "Mesh", "-p", "geodetic", "-C",
         "-o", $outputForDocker,
         $rasterForDocker
-    )
+    ) -ProgressMessage "[7/8] $($CountyConfig.name) ctb-tile mesh"
 
     Invoke-ExternalCommand -FilePath $docker -ArgumentList @(
         "run", "--rm",
@@ -337,7 +573,7 @@ function Invoke-Ctb {
         "ctb-tile", "-f", "Mesh", "-p", "geodetic", "-C", "-l",
         "-o", $outputForDocker,
         $rasterForDocker
-    )
+    ) -ProgressMessage "[7/8] $($CountyConfig.name) ctb-tile layer.json"
 }
 
 function Test-TerrainOutput {
@@ -362,6 +598,7 @@ function Test-TerrainOutput {
 function Invoke-CountyBuild {
     param([Parameter(Mandatory)] $CountyConfig)
 
+    Write-Log "[1/8] $($CountyConfig.name) 檢查 TGOS 來源"
     $remoteInfo = Get-RemoteFileInfo -CountyConfig $CountyConfig
     Write-Log "$($CountyConfig.name) TGOS HEAD：status=$($remoteInfo.StatusCode), bytes=$($remoteInfo.Bytes), modified=$($remoteInfo.LastModified)"
 
@@ -389,8 +626,13 @@ function Invoke-CountyBuild {
             }
         }
         if ($needsDownload) {
+            Write-Log "[2/8] $($CountyConfig.name) 下載來源 zip"
             Save-FileWithRetry -Url $CountyConfig.url -TargetPath $zipPath
+        } else {
+            Write-Log "[2/8] $($CountyConfig.name) 來源 zip 已可用"
         }
+    } else {
+        Write-Log "[2/8] $($CountyConfig.name) 略過下載"
     }
 
     if (-not (Test-Path -LiteralPath $zipPath)) {
@@ -402,18 +644,22 @@ function Invoke-CountyBuild {
     }
     if (-not (Test-Path -LiteralPath $extractPath)) {
         New-Directory -Path $extractPath
-        Write-Log "解壓縮來源 zip：$zipPath"
+        Write-Log "[3/8] $($CountyConfig.name) 解壓縮來源 zip：$zipPath"
         Expand-Archive -LiteralPath $zipPath -DestinationPath $extractPath -Force
+    } else {
+        Write-Log "[3/8] $($CountyConfig.name) 解壓目錄已存在，略過解壓"
     }
 
+    Write-Log "[4/8] $($CountyConfig.name) 掃描 DEM 來源檔"
     $sourceFiles = Get-SourceFiles -RawPath $extractPath
     if ($sourceFiles.Count -lt 1) {
         throw "解壓後找不到 DEM raster / grid 檔：$extractPath"
     }
-    Write-Log "$($CountyConfig.name) 找到 $($sourceFiles.Count) 個 DEM 來源檔"
+    Write-Log "[4/8] $($CountyConfig.name) 找到 $($sourceFiles.Count) 個 DEM 來源檔"
 
     $sourceVrt = Build-SourceVrt -CountyConfig $CountyConfig -SourceFiles $sourceFiles -WorkPath $workPath
-    $epsg4326Raster = Build-Epsg4326Raster -CountyConfig $CountyConfig -SourceVrt $sourceVrt -WorkPath $workPath
+    $sourceForWarp = Invoke-FillNoData -CountyConfig $CountyConfig -SourceRaster $sourceVrt -WorkPath $workPath
+    $epsg4326Raster = Build-Epsg4326Raster -CountyConfig $CountyConfig -SourceRaster $sourceForWarp -WorkPath $workPath
 
     if ($ForceRebuild -and (Test-Path -LiteralPath $outputPath)) {
         Remove-Item -LiteralPath $outputPath -Recurse -Force
@@ -421,6 +667,7 @@ function Invoke-CountyBuild {
     }
 
     Invoke-Ctb -CountyConfig $CountyConfig -RasterPath $epsg4326Raster -OutputPath $outputPath
+    Write-Log "[8/8] $($CountyConfig.name) 正規化 terrain 檔案"
     Normalize-TerrainTiles -OutputPath $outputPath
     Test-TerrainOutput -CountyConfig $CountyConfig -OutputPath $outputPath
     Add-HistoryEntry -CountyConfig $CountyConfig -Status "SUCCESS" -Message "terrain 產製完成" -RemoteInfo $remoteInfo
@@ -430,10 +677,24 @@ function Main {
     New-Directory -Path $LogDir
     Write-Log "開始 terrain pipeline，CTB=$DockerImage，ctb=$CtbCommandText"
 
-    $required = @("gdalinfo", "gdalbuildvrt", "gdalwarp", "gdal_translate")
+    $counties = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
+    $knownCountyIds = @($counties | ForEach-Object { $_.id })
+    if ($County -and $County.Count -gt 0) {
+        $unknownCountyIds = @($County | Where-Object { $knownCountyIds -notcontains $_ })
+        if ($unknownCountyIds.Count -gt 0) {
+            throw "未知縣市 id：$($unknownCountyIds -join ', ')；可用：$($knownCountyIds -join ', ')"
+        }
+    }
+
+    $required = @("gdalinfo", "gdalbuildvrt", "gdalwarp")
     foreach ($tool in $required) {
         $path = Get-RequiredCommand -Name $tool
         Write-Log "工具確認：$tool => $path"
+    }
+
+    if (-not $SkipFillNoData -and $FillDistancePixels -gt 0) {
+        $gdalPython = Get-GdalPythonCommand
+        Write-Log "工具確認：GDAL Python => $gdalPython"
     }
 
     $dockerText = Get-DockerVersionText
@@ -441,10 +702,9 @@ function Main {
     $dockerMissing = ($dockerText -eq "docker unavailable")
 
     if (-not $ValidateOnly) {
-        Get-RequiredCommand -Name "docker" | Out-Null
+        Assert-DockerDaemon
     }
 
-    $counties = Get-Content -LiteralPath $ConfigPath -Raw | ConvertFrom-Json
     $selected = if ($All -or -not $County -or $County.Count -eq 0) {
         @($counties)
     } else {
