@@ -1,0 +1,48 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-05-23T08:28:29+00:00",
+    "epsg": "EPSG:3826",
+    "source": {
+        "id": "dtm_2025_kinmen",
+        "name": "金門縣 2025 DTM 不分幅",
+        "version": "2025",
+        "priority": 1,
+        "role": "primary",
+        "countyId": "kinmen",
+        "countyName": "金門縣",
+        "enabled": true,
+        "available": true,
+        "tileCount": 1,
+        "url": "tiles_dtm_2025_kinmen.json",
+        "message": ""
+    },
+    "tiles": [
+        {
+            "label": "DEM_KinMen_V2025.tif",
+            "tileKey": "dem_kinmen_v2025",
+            "sourceId": "dtm_2025_kinmen",
+            "countyId": "kinmen",
+            "countyName": "金門縣",
+            "version": "2025",
+            "priority": 1,
+            "role": "primary",
+            "fileName": "DEM_KinMen_V2025.tif",
+            "entryName": "DEM_KinMen_V2025.tif",
+            "format": "tif",
+            "sourceSrs": "EPSG:3825",
+            "epsg": "EPSG:3826",
+            "bbox": [
+                169590,
+                2697590,
+                197590,
+                2714390
+            ],
+            "resolutionX": 20,
+            "resolutionY": 20,
+            "nodata": "-32767",
+            "md5": "20b9e9db753c73d7c4698955b7e9e511",
+            "bytes": 4711484,
+            "wkt": "POLYGON((-33117.1384 2717026.2564, -33360.3712 2700212.7136, -5339.7245 2699808.5721, -5096.5718 2716619.7573, -33117.1384 2717026.2564))"
+        }
+    ]
+}

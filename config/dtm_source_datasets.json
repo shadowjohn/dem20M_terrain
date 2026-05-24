@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "description": "DTM 年度來源 CSV registry；由 tools/update-dtm-sources.php 展開成 config/dtm_sources.json。",
+  "datasets": [
+    {
+      "id": "dtm_2025",
+      "label": "2025 DTM",
+      "version": "2025",
+      "priority": 1,
+      "defaultRole": "primary",
+      "dataGovUrl": "https://data.gov.tw/dataset/176927",
+      "alternateDataGovUrl": "https://data.gov.tw/dataset/175239",
+      "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/80E9C878-8674-4BBA-A17D-DE4C5CA3FF26/resource/BCFFC898-20CE-4F9F-8325-23DBAA60061F/download",
+      "enabled": true
+    },
+    {
+      "id": "dtm_2024",
+      "label": "2024 DTM",
+      "version": "2024",
+      "priority": 2,
+      "defaultRole": "fallback",
+      "dataGovUrl": "https://data.gov.tw/dataset/169807",
+      "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/91C8DD53-6D5C-48DB-A548-FB27683FBC4B/resource/9F4010ED-4EDD-4347-93EE-A3445AE4AF0D/download",
+      "enabled": true
+    },
+    {
+      "id": "dtm_old_moi",
+      "label": "內政部 OLD DTM",
+      "version": "OLD",
+      "priority": 3,
+      "defaultRole": "fallback",
+      "dataGovUrl": "https://data.gov.tw/dataset/35430",
+      "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/84CF211B-4788-4FEF-B296-0F292C1DCBB8/resource/279E125C-24C9-41C5-ABE4-B4E8EE506748/download",
+      "enabled": true
+    }
+  ]
+}

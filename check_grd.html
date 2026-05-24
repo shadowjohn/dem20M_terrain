@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GRD 缺塊檢查</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://www.focusit.com.tw/easymap/easymap/easymap.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      font-family: "Segoe UI", Arial, sans-serif;
+    }
+    .layout {
+      display: flex;
+      width: 100%;
+      height: 100%;
+    }
+    .sidebar {
+      width: 280px;
+      border-right: 1px solid #d0d7de;
+      overflow: auto;
+      background: #f6f8fa;
+      padding: 12px;
+      box-sizing: border-box;
+    }
+    .sidebar h1 {
+      font-size: 16px;
+      margin: 0 0 10px 0;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin: 14px 0 8px 0;
+      color: #24292f;
+    }
+    .county-btn,
+    .coverage-btn,
+    .coverage-tab {
+      display: block;
+      width: 100%;
+      margin: 0 0 6px 0;
+      padding: 8px 10px;
+      border: 1px solid #c7d2e0;
+      border-radius: 6px;
+      text-align: left;
+      cursor: pointer;
+      background: #fff;
+      font-size: 14px;
+    }
+    .coverage-tabs {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid #c7d2e0;
+      margin-bottom: 8px;
+    }
+    .coverage-tab {
+      display: inline-block;
+      width: auto;
+      margin: 0 0 -1px 0;
+      padding: 7px 10px;
+      border-radius: 6px 6px 0 0;
+      font-size: 12px;
+    }
+    .county-btn.active,
+    .coverage-btn.active,
+    .coverage-tab.active {
+      border-color: #1f6feb;
+      background: #eaf2ff;
+    }
+    .coverage-source-meta {
+      display: block;
+      margin-top: 3px;
+      color: #57606a;
+      font-size: 12px;
+    }
+    .hint {
+      font-size: 12px;
+      color: #57606a;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+    #map {
+      flex: 1;
+      min-width: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>GRD 清單</h1>
+      <div class="section-title">縣市 polygon</div>
+      <div id="countyList"></div>
+      <div class="section-title">Coverage 模式</div>
+      <div id="coverageTabs" class="coverage-tabs" role="tablist"></div>
+      <div id="coverageSpecialList"></div>
+      <div id="coverageSourceList"></div>
+      <div class="hint" id="status">讀取清單中...</div>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script>
+    var mapInstance = null;
+    var CITY_BOUNDARY_SOURCE_URL = "https://3wa.tw/data/city.json";
+    var CITY_BOUNDARY_LOCAL_URL = "data/city.json";
+    var CITY_BOUNDARY_Z_INDEX = 5;
+    var CITY_BOUNDARY_LINE_COLOR = "#ff4d00";
+    var CITY_BOUNDARY_LINE_WIDTH = 2;
+    var CITY_BOUNDARY_FILL_COLOR = "rgba(255,255,255,0)";
+    var GRD_Z_INDEX = 10;
+    var COVERAGE_INDEX_URL = "data/coverage/index.json";
+    var COVERAGE_Z_INDEX = 10;
+
+    var currentItems = [];
+    var cityBoundaryItems = [];
+    var coverageIndex = null;
+    var currentCoverageTab = "2025";
+
+    function clearItems() {
+      if (!mapInstance || !currentItems.length) return;
+      for (var i = 0; i < currentItems.length; i++) {
+        try {
+          mapInstance.removeItem(currentItems[i]);
+        } catch (err) {}
+      }
+      currentItems = [];
+    }
+
+    function setStatus(text) {
+      $("#status").text(text);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function setItemZIndex(item, zIndex) {
+      if (!mapInstance || !item) return;
+      try {
+        mapInstance.setItemZIndex(item, zIndex);
+      } catch (err) {}
+    }
+
+    function applyWktStyle(item, lineColor, lineWidth, fillColor) {
+      if (item.setLineColor) item.setLineColor(lineColor);
+      if (item.setLineWidth) item.setLineWidth(lineWidth);
+      if (item.setFillColor) item.setFillColor(fillColor);
+      if (item.setStrokeColor) item.setStrokeColor(lineColor);
+      if (item.setStrokeWidth) item.setStrokeWidth(lineWidth);
+      if (item.setStyle) {
+        item.setStyle({
+          lineColor: lineColor,
+          strokeColor: lineColor,
+          lineWidth: lineWidth,
+          strokeWidth: lineWidth,
+          fillColor: fillColor
+        });
+      }
+    }
+
+    function applyCityBoundaryStyle(item) {
+      applyWktStyle(item, CITY_BOUNDARY_LINE_COLOR, CITY_BOUNDARY_LINE_WIDTH, CITY_BOUNDARY_FILL_COLOR);
+    }
+
+    function bindGridFeatureClick(item, provider, row) {
+      if (!item.setFeatureClick) return;
+      item.setFeatureClick(function(properties, geometryType, dgxy) {
+        var label = row.label || (properties && properties.label) || "";
+        var popupXY = dgxy || (mapInstance.getCenter ? mapInstance.getCenter() : null);
+        var html = ""
+          + "<div style=\"line-height:1.6;font-size:13px;\">"
+          + "<b>" + escapeHtml(provider.name) + "</b><br>"
+          + "id: " + escapeHtml(provider.id) + "<br>"
+          + "grd: " + escapeHtml(label);
+        if (row.sourceId || row.tileKey || row.md5) {
+          html += "<br>sourceId: " + escapeHtml(row.sourceId || provider.sourceId || provider.id)
+            + "<br>version: " + escapeHtml(row.version || provider.version || "")
+            + "<br>priority: " + escapeHtml(row.priority == null ? "" : row.priority)
+            + "<br>tileKey: " + escapeHtml(row.tileKey || "")
+            + "<br>md5: " + escapeHtml(row.md5 || "");
+        }
+        html += ""
+          + "</div>";
+        if (popupXY) {
+          mapInstance.openInfoWindow(popupXY, html, 330, row.md5 ? 180 : 105);
+        }
+        return false;
+      });
+    }
+
+    function normalizeCityBoundaryRows(rows) {
+      var out = [];
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row || !row.wkt) continue;
+        out.push({
+          label: row.COUNTYNAME || row.label || row.COUNTYCODE || ("city-" + i),
+          COUNTYID: row.COUNTYID || "",
+          COUNTYCODE: row.COUNTYCODE || "",
+          COUNTYNAME: row.COUNTYNAME || "",
+          COUNTYENG: row.COUNTYENG || "",
+          wkt: row.wkt
+        });
+      }
+      return out;
+    }
+
+    function loadCityBoundary() {
+      $.ajax({
+        url: CITY_BOUNDARY_LOCAL_URL,
+        method: "GET",
+        dataType: "json",
+        cache: false
+      }).done(function(rows) {
+        if (!Array.isArray(rows)) return;
+        var wktRows = normalizeCityBoundaryRows(rows);
+        if (!wktRows.length) return;
+        for (var i = 0; i < wktRows.length; i++) {
+          try {
+            var cityBoundaryItem = new dgWKT([wktRows[i]], "EPSG:4326");
+            applyCityBoundaryStyle(cityBoundaryItem);
+            if (cityBoundaryItem.setFeatureClick) {
+              cityBoundaryItem.setFeatureClick(function() { return false; });
+            }
+            mapInstance.addItem(cityBoundaryItem);
+            applyCityBoundaryStyle(cityBoundaryItem);
+            setItemZIndex(cityBoundaryItem, CITY_BOUNDARY_Z_INDEX);
+            cityBoundaryItems.push(cityBoundaryItem);
+          } catch (err) {}
+        }
+      }).fail(function() {
+        setStatus("縣市界線讀取失敗：" + CITY_BOUNDARY_SOURCE_URL);
+      });
+    }
+
+    function renderWktItems(provider, rows) {
+      clearItems();
+      var shown = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row || !row.wkt) continue;
+        try {
+          var item = new dgWKT([{
+            label: row.label || "",
+            county_id: provider.id,
+            county_name: provider.name,
+            wkt: row.wkt
+          }], "EPSG:3826");
+          bindGridFeatureClick(item, provider, row);
+          mapInstance.addItem(item);
+          applyWktStyle(item, "#0066ff", 2, "rgba(0,255,0,0.2)");
+
+          setItemZIndex(item, provider.zIndex || GRD_Z_INDEX);
+          currentItems.push(item);
+          shown++;
+        } catch (err) {}
+      }
+      setStatus("已套用 " + shown + " 筆");
+    }
+
+    function loadCounty(provider, buttonEl) {
+      $(".county-btn").removeClass("active");
+      $(buttonEl).addClass("active");
+      setStatus("讀取 " + provider.id + ".txt ...");
+
+      $.ajax({
+        url: "data/polygons/" + provider.id + ".txt",
+        method: "GET",
+        dataType: "json",
+        cache: false
+      }).done(function(rows) {
+        if (!Array.isArray(rows)) {
+          setStatus("格式錯誤：" + provider.id + ".txt 不是陣列");
+          return;
+        }
+        renderWktItems(provider, rows);
+      }).fail(function() {
+        clearItems();
+        setStatus("找不到 data/polygons/" + provider.id + ".txt");
+      });
+    }
+
+    function loadCoverageIndex() {
+      $.ajax({
+        url: COVERAGE_INDEX_URL,
+        method: "GET",
+        dataType: "json",
+        cache: false
+      }).done(function(index) {
+        coverageIndex = index;
+        renderCoverageControls();
+      }).fail(function() {
+        $("#coverageTabs").empty();
+        $("#coverageSpecialList").empty();
+        $("#coverageSourceList").empty();
+      });
+    }
+
+    function renderCoverageControls() {
+      if (!coverageIndex || !Array.isArray(coverageIndex.sources)) return;
+      var versions = [];
+      var allowedTabs = ["2025", "2024", "OLD"];
+      for (var i = 0; i < coverageIndex.sources.length; i++) {
+        var version = coverageIndex.sources[i].version || "";
+        if (allowedTabs.indexOf(version) >= 0 && versions.indexOf(version) < 0) versions.push(version);
+      }
+      versions.sort(function(a, b) {
+        return allowedTabs.indexOf(a) - allowedTabs.indexOf(b);
+      });
+      if (versions.indexOf(currentCoverageTab) < 0) currentCoverageTab = versions[0] || "2025";
+
+      var tabBox = $("#coverageTabs");
+      tabBox.empty();
+      for (var v = 0; v < versions.length; v++) {
+        (function(version) {
+          var btn = $("<button>")
+            .addClass("coverage-tab")
+            .attr("role", "tab")
+            .attr("aria-selected", version === currentCoverageTab ? "true" : "false")
+            .toggleClass("active", version === currentCoverageTab)
+            .text(version === "OLD" ? "內政部" : version)
+            .on("click", function() {
+              currentCoverageTab = version;
+              renderCoverageControls();
+            });
+          tabBox.append(btn);
+        })(versions[v]);
+      }
+
+      var special = $("#coverageSpecialList");
+      special.empty();
+      if (coverageIndex.layers && coverageIndex.layers.bestSource) {
+        special.append($("<button>")
+          .addClass("coverage-btn")
+          .text("整併後 best-source")
+          .on("click", function() { loadCoverageSpecialLayer("bestSource", this); }));
+      }
+      if (coverageIndex.layers && coverageIndex.layers.missingPrimaryFallback) {
+        special.append($("<button>")
+          .addClass("coverage-btn")
+          .text("fallback-only 缺格")
+          .on("click", function() { loadCoverageSpecialLayer("missingPrimaryFallback", this); }));
+      }
+      if (coverageIndex.layers && coverageIndex.layers.overlapTiles) {
+        special.append($("<button>")
+          .addClass("coverage-btn")
+          .text("overlap tiles")
+          .on("click", function() { loadCoverageSpecialLayer("overlapTiles", this); }));
+      }
+
+      var list = $("#coverageSourceList");
+      list.empty();
+      for (var i = 0; i < coverageIndex.sources.length; i++) {
+        var source = coverageIndex.sources[i];
+        if (!source || !source.id) continue;
+        if (source.version !== currentCoverageTab) continue;
+        (function(source) {
+          var text = source.name || source.id;
+          var meta = (source.version || "") + " / p" + source.priority + " / " + source.role + " / " + source.tileCount + " tiles";
+          var btn = $("<button>")
+            .addClass("coverage-btn")
+            .html(escapeHtml(text) + "<span class=\"coverage-source-meta\">" + escapeHtml(meta) + "</span>")
+            .on("click", function() { loadCoverageSource(source, this); });
+          list.append(btn);
+        })(source);
+      }
+    }
+
+    function normalizeCoverageRows(payload) {
+      if (!payload) return [];
+      if (Array.isArray(payload)) return payload;
+      if (Array.isArray(payload.tiles)) return payload.tiles;
+      return [];
+    }
+
+    function coverageStyleFor(sourceOrLayer) {
+      var role = sourceOrLayer.role || sourceOrLayer.layer || "";
+      if (role === "diagnostic") {
+        return { line: "#8a63d2", width: 2, fill: "rgba(138,99,210,0.18)" };
+      }
+      if (role === "bestSource") {
+        return { line: "#0066ff", width: 2, fill: "rgba(0,255,0,0.2)" };
+      }
+      if (role === "fallback" || role === "missingPrimaryFallback") {
+        return { line: "#d1242f", width: 2, fill: "rgba(255,128,0,0.22)" };
+      }
+      if (role === "overlapTiles") {
+        return { line: "#bf8700", width: 2, fill: "rgba(255,215,0,0.22)" };
+      }
+      return { line: "#0066ff", width: 2, fill: "rgba(0,255,0,0.2)" };
+    }
+
+    function renderCoverageTiles(provider, rows) {
+      clearItems();
+      var style = coverageStyleFor(provider);
+      var shown = 0;
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i];
+        if (!row || !row.wkt) continue;
+        try {
+          var item = new dgWKT([{
+            label: row.label || row.fileName || row.tileKey || "",
+            sourceId: row.sourceId || provider.id,
+            tileKey: row.tileKey || "",
+            md5: row.md5 || "",
+            wkt: row.wkt
+          }], "EPSG:3826");
+          applyWktStyle(item, style.line, style.width, style.fill);
+          bindGridFeatureClick(item, provider, row);
+          mapInstance.addItem(item);
+          setItemZIndex(item, COVERAGE_Z_INDEX);
+          currentItems.push(item);
+          shown++;
+        } catch (err) {}
+      }
+      setStatus("Coverage 已套用 " + shown + " 筆");
+    }
+
+    function activateCoverageButton(buttonEl) {
+      $(".county-btn,.coverage-btn").removeClass("active");
+      $(buttonEl).addClass("active");
+    }
+
+    function loadCoverageSource(source, buttonEl) {
+      activateCoverageButton(buttonEl);
+      setStatus("讀取 coverage " + source.id + " ...");
+      $.ajax({
+        url: "data/coverage/" + source.url,
+        method: "GET",
+        dataType: "json",
+        cache: false
+      }).done(function(payload) {
+        var rows = normalizeCoverageRows(payload);
+        renderCoverageTiles({
+          id: source.id,
+          name: source.name || source.id,
+          version: source.version,
+          priority: source.priority,
+          role: source.role,
+          zIndex: COVERAGE_Z_INDEX
+        }, rows);
+      }).fail(function() {
+        clearItems();
+        setStatus("找不到 data/coverage/" + source.url);
+      });
+    }
+
+    function loadCoverageSpecialLayer(layerKey, buttonEl) {
+      if (!coverageIndex || !coverageIndex.layers || !coverageIndex.layers[layerKey]) return;
+      activateCoverageButton(buttonEl);
+      var fileName = coverageIndex.layers[layerKey];
+      setStatus("讀取 coverage " + layerKey + " ...");
+      $.ajax({
+        url: "data/coverage/" + fileName,
+        method: "GET",
+        dataType: "json",
+        cache: false
+      }).done(function(payload) {
+        var rows = normalizeCoverageRows(payload);
+        renderCoverageTiles({
+          id: layerKey,
+          name: layerKey,
+          role: layerKey,
+          zIndex: COVERAGE_Z_INDEX
+        }, rows);
+      }).fail(function() {
+        clearItems();
+        setStatus("找不到 data/coverage/" + fileName);
+      });
+    }
+
+    function buildCountyList(counties) {
+      var list = $("#countyList");
+      list.empty();
+      for (var i = 0; i < counties.length; i++) {
+        (function(item) {
+          var btn = $("<button>")
+            .addClass("county-btn")
+            .text(item.name + " (" + item.id + ")")
+            .on("click", function() { loadCounty(item, this); });
+          list.append(btn);
+        })(counties[i]);
+      }
+    }
+
+    function init() {
+      mapInstance = new Easymap("map");
+      loadCityBoundary();
+      loadCoverageIndex();
+      $.getJSON("config/counties.json", function(rows) {
+        var counties = [];
+        for (var i = 0; i < rows.length; i++) {
+          if (!rows[i] || !rows[i].id || !rows[i].name) continue;
+          counties.push({ id: rows[i].id, name: rows[i].name });
+        }
+        counties.push({ id: "miaoli_2024", name: "苗栗縣(2024)" });
+        counties.push({ id: "miaoli_moi", name: "苗栗縣(內政部DEM)" });
+        counties.push({ id: "penghu_moi", name: "澎湖縣(內政部DEM)" });
+        counties.push({ id: "penghu_grd_raw", name: "澎湖縣(分幅原始診斷)" });
+        counties.push({ id: "taiwan", name: "全臺主島(官方不分幅)" });
+        counties.push({ id: "all_taiwan", name: "全臺含離島(官方)" });
+        buildCountyList(counties);
+        setStatus("請點選左側縣市");
+      }).fail(function() {
+        setStatus("無法讀取 config/counties.json");
+      });
+    }
+
+    $(init);
+  </script>
+</body>
+</html>

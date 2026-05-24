@@ -55,6 +55,26 @@
 
   <script>
     const TERRAIN_OPTIONS = {
+      all_taiwan: {
+        url: "terrain/all_taiwan",
+        label: "全臺含外島",
+        camera: [120.9, 23.75, 520000],
+      },
+      all_taiwan_from_grd: {
+        url: "terrain/all_taiwan_from_grd",
+        label: "全臺含外島(from GRD)",
+        camera: [120.9, 23.75, 520000],
+      },
+      taiwan: {
+        url: "terrain/taiwan",
+        label: "全臺主島",
+        camera: [120.9, 23.75, 430000],
+      },
+      taiwan_from_grd: {
+        url: "terrain/taiwan_from_grd",
+        label: "臺灣本島(from GRD)",
+        camera: [120.9, 23.75, 430000],
+      },
       keelung: {
         url: "terrain/keelung",
         label: "基隆",
@@ -88,6 +108,11 @@
       miaoli: {
         url: "terrain/miaoli",
         label: "苗栗",
+        camera: [120.82, 24.56, 76000],
+      },
+      miaoli_moi: {
+        url: "terrain/miaoli_moi",
+        label: "苗栗(內政部DEM)",
         camera: [120.82, 24.56, 76000],
       },
       taichung: {
@@ -205,7 +230,7 @@
         item.textContent = option.label;
         select.appendChild(item);
       }
-      select.value = "taichung";
+      select.value = "all_taiwan";
     }
 
     function init() {
@@ -228,7 +253,7 @@
       document.getElementById("terrainSelect").addEventListener("change", (event) => {
         loadTerrain(event.target.value);
       });
-      loadTerrain("taichung");
+      loadTerrain("all_taiwan");
     }
 
     init();

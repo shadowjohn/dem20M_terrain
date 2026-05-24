@@ -1,0 +1,20 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-05-23T08:28:29+00:00",
+    "epsg": "EPSG:3826",
+    "source": {
+        "id": "dtm_old_taiwan_penghu_unified",
+        "name": "全臺含澎湖 內政部 OLD DTM 不分幅",
+        "version": "OLD",
+        "priority": 3,
+        "role": "reference",
+        "countyId": "all_taiwan",
+        "countyName": "全臺含澎湖",
+        "enabled": false,
+        "available": false,
+        "tileCount": 0,
+        "url": "tiles_dtm_old_taiwan_penghu_unified.json",
+        "message": "disabled"
+    },
+    "tiles": []
+}

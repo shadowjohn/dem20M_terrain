@@ -16,11 +16,16 @@ logs/
 *.grd
 *.terrain
 *.terrain.gz
+*.sqlite-wal
+*.sqlite-shm
 
 # 本機執行暫存
 .cache/
 .tmp/
 *.log
+tmp_*
+/app.js
+/terrain_config.js
 
 # Node 測試環境
 node_modules/

@@ -194,7 +194,7 @@
     "name": "澎湖縣",
     "zipName": "penghu-20mdem-2025.zip",
     "url": "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/c1bdbb99-6290-42fb-a971-3db9fae3242c/分幅_澎湖縣20MDEM(2025).zip",
-    "sourceSrs": "EPSG:3826",
+    "sourceSrs": "EPSG:3825",
     "targetSrs": "EPSG:4326",
     "outputDir": "output/penghu",
     "expectedBytes": 12858236
@@ -204,7 +204,7 @@
     "name": "金門縣",
     "zipName": "kinmen-20mdem-2025.zip",
     "url": "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/821ed3ad-7825-4fe6-aaac-d2d6df8ac7cb/分幅_金門縣20MDEM(2025).zip",
-    "sourceSrs": "EPSG:3826",
+    "sourceSrs": "EPSG:3825",
     "targetSrs": "EPSG:4326",
     "outputDir": "output/kinmen",
     "expectedBytes": 2664712

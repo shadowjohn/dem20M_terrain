@@ -1,0 +1,48 @@
+{
+    "schemaVersion": 1,
+    "generatedAt": "2026-05-23T08:28:29+00:00",
+    "epsg": "EPSG:3826",
+    "source": {
+        "id": "dtm_2025_penghu",
+        "name": "澎湖縣 2025 DTM 不分幅",
+        "version": "2025",
+        "priority": 1,
+        "role": "primary",
+        "countyId": "penghu",
+        "countyName": "澎湖縣",
+        "enabled": true,
+        "available": true,
+        "tileCount": 1,
+        "url": "tiles_dtm_2025_penghu.json",
+        "message": ""
+    },
+    "tiles": [
+        {
+            "label": "DEM_Penghu_V2025.tif",
+            "tileKey": "dem_penghu_v2025",
+            "sourceId": "dtm_2025_penghu",
+            "countyId": "penghu",
+            "countyName": "澎湖縣",
+            "version": "2025",
+            "priority": 1,
+            "role": "primary",
+            "fileName": "DEM_Penghu_V2025.tif",
+            "entryName": "DEM_Penghu_V2025.tif",
+            "format": "tif",
+            "sourceSrs": "EPSG:3825",
+            "epsg": "EPSG:3826",
+            "bbox": [
+                282130,
+                2564990,
+                324230,
+                2634110
+            ],
+            "resolutionX": 20,
+            "resolutionY": 20,
+            "nodata": "-32767",
+            "md5": "075064d0fd209d8048c39ff4f66a6c58",
+            "bytes": 29127932,
+            "wkt": "POLYGON((78333.5784 2635093.3841, 77371.0416 2565955.6668, 119477.5393 2565376.8571, 120439.7194 2634499.8926, 78333.5784 2635093.3841))"
+        }
+    ]
+}
