@@ -1,6 +1,6 @@
 # dem20M_terrain
 
-我把 2025 年版 20M DTM 轉成 Cesium quantized-mesh terrain，目標是讓這個 repo 可以穩定重跑、續跑、驗證與發布。
+本專案將 2025 年版 20M DTM 轉成 Cesium quantized-mesh terrain，目標是讓產線可以穩定重跑、續跑、驗證與發布。
 
 正式產線以 `2025年版全臺灣20公尺網格數值地形模型DTM資料` 為主。疊圖策略是 2025 不分幅全臺當連續底圖、2025 縣市分幅補不分幅缺值；苗栗、新竹縣這類已確認 2025 仍有異常有效值或缺格的位置，內政部 `全臺灣20公尺網格數值地形模型資料` 的完整分幅會放在最上層修補。澎湖則保留內政部版本作為錯包/高程合理性比對。
 
@@ -24,7 +24,7 @@ output/taiwan/
 output/all_taiwan/
 ```
 
-大型下載資料與 terrain 成果不簽入版控，我只追蹤設定、腳本、測試、viewer 與文件。
+大型下載資料與 terrain 成果不簽入版控；版控只追蹤設定、腳本、測試、viewer 與文件。
 
 ## 目前定版
 
@@ -116,7 +116,7 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllWithTaiwan
 ```
 
-如果 2025 不分幅全臺主島來源暫時不可用，我才手動指定回到縣市 mosaic 流程；澎湖、金門仍會強制使用 2025 不分幅離島來源，不會退回疑似錯包的分幅資料：
+如果 2025 不分幅全臺主島來源暫時不可用，可手動指定回到縣市 mosaic 流程；澎湖、金門仍會強制使用 2025 不分幅離島來源，不會退回疑似錯包的分幅資料：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllWithTaiwan -SkipUnifiedTaiwanSource
@@ -168,36 +168,36 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 
 ## 產製流程
 
-1. 我用 `Invoke-WebRequest -Method Head` 檢查 TGOS zip 連結與檔案大小。
-2. 我下載 zip 到 `data/raw/<county>/`，解壓到 `data/raw/<county>/extract/`。
-3. 我掃描 DEM raster / grid 檔。
-4. 我優先用 `gdalbuildvrt` 建來源 VRT。
-5. 如果來源 grid 因 positive NS resolution 不能直接建 VRT，我改用 `gdalwarp` 逐檔轉成 north-up GeoTIFF。
-6. 如果遇到 GDAL 無法直接讀取的稀疏 XYZ，我先補齊缺格為 `-32768` 再重試。
-7. 我把來源合併後轉成 `EPSG:4326` GeoTIFF。
-8. 在 `-AllWithTaiwan` 流程中，我優先下載 2025 官方不分幅全臺 TIF，轉成 `data/work/taiwan_unified/taiwan_unified-4326.tif`。
+1. 使用 `Invoke-WebRequest -Method Head` 檢查 TGOS zip 連結與檔案大小。
+2. 下載 zip 到 `data/raw/<county>/`，解壓到 `data/raw/<county>/extract/`。
+3. 掃描 DEM raster / grid 檔。
+4. 優先用 `gdalbuildvrt` 建來源 VRT。
+5. 如果來源 grid 因 positive NS resolution 不能直接建 VRT，改用 `gdalwarp` 逐檔轉成 north-up GeoTIFF。
+6. 如果遇到 GDAL 無法直接讀取的稀疏 XYZ，先補齊缺格為 `-32768` 再重試。
+7. 將來源合併後轉成 `EPSG:4326` GeoTIFF。
+8. 在 `-AllWithTaiwan` 流程中，優先下載 2025 官方不分幅全臺 TIF，轉成 `data/work/taiwan_unified/taiwan_unified-4326.tif`。
 9. 澎湖、金門正式 terrain 優先使用 2025 官方不分幅離島 GeoTIFF。
-10. 我用 2025 不分幅全臺來源裁主島縣市 bbox，再用 2025 分幅補不分幅缺值；遇到 2025 分幅也缺的確認缺格時，才用內政部 DEM 補。
-11. 我用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
-12. 我把 `.terrain.gz` 或 gzip 內容的 `.terrain` 正規化成未壓縮 `.terrain`，避免 Web Server 沒送 `Content-Encoding: gzip` 時 Cesium 讀壞。
-13. 我用 raster metadata 回寫 `layer.json` 的實際 `bounds`。
-14. 我寫出 `build-manifest.json`，記錄來源、bbox、tile 數、zoom levels、GDAL/Docker/CTB 設定。
-15. 我先產到 `.tmp-<run>` 目錄，驗證成功後才發布到正式 output，避免中斷留下半套成果。
+10. 用 2025 不分幅全臺來源裁主島縣市 bbox，再用 2025 分幅補不分幅缺值；遇到 2025 分幅也缺的確認缺格時，才用內政部 DEM 補。
+11. 用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
+12. 將 `.terrain.gz` 或 gzip 內容的 `.terrain` 正規化成未壓縮 `.terrain`，避免 Web Server 沒送 `Content-Encoding: gzip` 時 Cesium 讀壞。
+13. 使用 raster metadata 回寫 `layer.json` 的實際 `bounds`。
+14. 寫出 `build-manifest.json`，記錄來源、bbox、tile 數、zoom levels、GDAL/Docker/CTB 設定。
+15. 先產到 `.tmp-<run>` 目錄，驗證成功後才發布到正式 output，避免中斷留下半套成果。
 
 ## 全臺含外島 all_taiwan
 
-`all_taiwan` 不是前端拼接多個縣市，而是我在產線中正式建立的合併 provider。目前資料源以 2025 `不分幅_全台20MDEM(2025)` 加上 2025 不分幅澎湖、金門為主；2025 縣市分幅會放在下層補不分幅缺值，苗栗、新竹縣這類 2025 分幅也缺的確認缺格，再用內政部 DEM 補。
+`all_taiwan` 不是前端拼接多個縣市，而是產線中正式建立的合併 provider。目前資料源以 2025 `不分幅_全台20MDEM(2025)` 加上 2025 不分幅澎湖、金門為主；2025 縣市分幅會放在下層補不分幅缺值，苗栗、新竹縣這類 2025 分幅也缺的確認缺格，再用內政部 DEM 補。
 
 `taiwan` 是只含主島的正式 provider，來源策略與 `all_taiwan` 的主島部分相同；`all_taiwan` 則再加 2025 不分幅澎湖、金門。這樣前端可依需求載入 `terrain/taiwan` 或 `terrain/all_taiwan`，不用在 Cesium 端拼多個 terrain provider。
 
 流程：
 
 1. `-AllWithTaiwan` 會先跑縣市來源，確保縣市有 EPSG:4326 raster 與 bbox；若有指定 `-County`，就只跑指定縣市來源。
-2. 我下載並轉換 2025 `不分幅_全台20MDEM(2025)`、`不分幅_澎湖20MDEM(2025)`、`不分幅_金門20MDEM(2025)`。
-3. 我用 2025 縣市分幅、2025 不分幅全臺主島、離島 raster 建立合併清單；若使用 `-UseMoiForCounty`，苗栗、新竹縣的內政部完整 DEM 會最後加入，再用 `gdalwarp -srcnodata -32768` 先燒成 NoData 透明的 composite GeoTIFF，避免上層補源的 NoData 蓋掉下層有效值。
-4. 我先產出 `output/taiwan`，`buildKind` 會記為 `taiwan_unified_split_gapfill` 或 `taiwan_unified_split_moi_gapfill`。
-5. 我再用同一套 CTB 流程產出 `output/all_taiwan`，`buildKind` 會記為 `all_taiwan_unified_split_gapfill` 或 `all_taiwan_unified_split_moi_gapfill`。
-6. 我再用 2025 不分幅全臺 raster 依各縣市原始 bbox 裁出 `data/work/<county>/<county>-unified-4326.tif`，並疊 2025 分幅與必要的內政部補洞來源產主島縣市 `output/<county>`；澎湖、金門使用 2025 不分幅離島 GeoTIFF。
+2. 下載並轉換 2025 `不分幅_全台20MDEM(2025)`、`不分幅_澎湖20MDEM(2025)`、`不分幅_金門20MDEM(2025)`。
+3. 用 2025 縣市分幅、2025 不分幅全臺主島、離島 raster 建立合併清單；若使用 `-UseMoiForCounty`，苗栗、新竹縣的內政部完整 DEM 會最後加入，再用 `gdalwarp -srcnodata -32768` 先燒成 NoData 透明的 composite GeoTIFF，避免上層補源的 NoData 蓋掉下層有效值。
+4. 先產出 `output/taiwan`，`buildKind` 會記為 `taiwan_unified_split_gapfill` 或 `taiwan_unified_split_moi_gapfill`。
+5. 再用同一套 CTB 流程產出 `output/all_taiwan`，`buildKind` 會記為 `all_taiwan_unified_split_gapfill` 或 `all_taiwan_unified_split_moi_gapfill`。
+6. 再用 2025 不分幅全臺 raster 依各縣市原始 bbox 裁出 `data/work/<county>/<county>-unified-4326.tif`，並疊 2025 分幅與必要的內政部補洞來源產主島縣市 `output/<county>`；澎湖、金門使用 2025 不分幅離島 GeoTIFF。
 
 若加上 `-UseMoiForCounty`，苗栗、新竹縣可改用 `data/work/<county>_moi_full/<county>_moi_full-4326.tif` 作為完整內政部補源；`taiwan` / `all_taiwan` 的 buildKind 會分別記為 `taiwan_unified_split_moi_full_gapfill`、`all_taiwan_unified_split_moi_full_gapfill`。這個模式會先建立 `data/work/taiwan/*-moi-full-composite-4326.tif` / `data/work/all_taiwan/*-moi-full-composite-4326.tif` 再切 terrain，避免 VRT 疊多個 MOI full 時 NoData 互相蓋掉。這個模式只重建全臺 provider，不會順手覆蓋正式縣市 `output/<county>`。
 
@@ -213,7 +213,7 @@ Cesium 同時間只會掛一個 `terrainProvider`，所以全臺含外島必須�
 
 ## Resume 與安全發布
 
-我讓產線可以續跑，但不只看資料夾是否存在。
+產線支援續跑，但不只看資料夾是否存在。
 
 既有 output 會先確認：
 
@@ -299,7 +299,7 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 git status --short --branch
 ```
 
-發布後我會用 HTTP 檢查：
+發布後使用 HTTP 檢查：
 
 ```bash
 curl -I https://example.com/terrain/all_taiwan/layer.json
@@ -312,11 +312,11 @@ curl -I https://example.com/terrain/all_taiwan/0/0/0.terrain
 
 這套 20M terrain 適合做全臺、縣市、山區、災防、林火、水庫、路廊等大範圍 3D 地形底座。
 
-它不適合做工程級高程、都市微地形、道路/橋梁細節或建物精準貼地。後續若要接建物 3D Tiles，我會另外定義 terrain-on 與 terrain-off 的高度策略。
+它不適合做工程級高程、都市微地形、道路/橋梁細節或建物精準貼地。後續若要接建物 3D Tiles，需要另外定義 terrain-on 與 terrain-off 的高度策略。
 
 ## 研究筆記
 
-這次整理下來，我不再把「年度較新」直接視為「資料較正確」。DEM 來源要用圖台與分幅 bbox 實際疊過一次，尤其是山區縣市和離島。
+這次整理下來，不再把「年度較新」直接視為「資料較正確」。DEM 來源要用圖台與分幅 bbox 實際疊過一次，尤其是山區縣市和離島。
 
 TGOS zip 的 `Last-Modified` 顯示 2025 來源確實比較新：2025 分幅大多是 `2025-09-09` 到 `2025-09-10`，高雄、臺東甚至更新到 `2026-02-23`；內政部 35430 大多是 `2024-04-11`，臺南是 `2024-04-23`。所以正式產線仍以 2025 DTM 為主，內政部資料只當補洞與異常比對來源。
 
