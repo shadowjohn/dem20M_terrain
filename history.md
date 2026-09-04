@@ -488,3 +488,48 @@
 - CTB image：ghcr.io/tum-gis/ctb-quantized-mesh:latest
 - 輸出：output/all_taiwan
 - 結果：全臺含外島 terrain 產製完成；來源模式：不分幅全臺主島 + 不分幅離島 + 2025縣市分幅缺值補洞 + 內政部完整DEM補洞(苗栗縣、新竹縣)
+
+## 2026-05-25 - 正式產線回歸 2025-only 台灣本島
+
+- 使用者決定正式 terrain 只採官方 2025 年版；台灣本島先做 `不分幅_全台20MDEM(2025)`，不再合併 2024、內政部 OLD、MOI full 或 2025 縣市分幅補洞。
+- 我把 `config/dtm_source_datasets.json` / `config/dtm_sources.json` 調整成 `2025_ONLY`，2024 與 OLD 只保留 disabled 設定與歷史診斷脈絡。
+- 我新增 `tools/build-terrain.ps1 -TaiwanOnly`，固定建立 `output/taiwan`，buildKind 為 `taiwan_unified_2025_only`，來源 NoData 保留。
+- `README.md` 已改寫成 2025-only 正式流程；舊的補洞研究保留在研究筆記，但標示為歷史診斷，不再進正式 provider。
+- 驗證：`node --test tests\*.test.js` 通過 19/19；PowerShell parse 通過；`-TaiwanOnly -ValidateOnly` 對 TGOS 來源 HEAD 回 200，bytes=268985841，modified=Tue, 09 Sep 2025 06:33:48 GMT。
+- 第一次實際 `-TaiwanOnly -ForceRebuild` 卡在本機環境找不到 `docker.exe`；補裝並啟動 Docker Desktop 後已成功重跑，見下方 12:05:17 記錄。
+
+## 2026-05-25 12:05:17 - 全臺主島 SUCCESS
+
+- 來源：taiwan-unified-mainland-2025-only
+- 來源大小：0 bytes
+- GDAL：GDAL 2.4.0, released 2018/12/14
+- Docker：Docker version 29.4.3, build 055a478
+- CTB image：ghcr.io/tum-gis/ctb-quantized-mesh:latest
+- 輸出：output/taiwan
+- 結果：全臺主島 terrain 產製完成；來源模式：2025-only 不分幅全臺主島；NoData 保留，不用縣市分幅、2024 或 MOI 補洞
+
+## 2026-05-25 12:36:01 - 澎湖縣 SUCCESS
+
+- 來源：https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/47910269-7315-4cd2-9101-7cdf524b47f5/不分幅_澎湖20MDEM(2025).zip
+- 來源大小：1268059 bytes
+- GDAL：GDAL 2.4.0, released 2018/12/14
+- Docker：Docker version 29.4.3, build 055a478
+- CTB image：ghcr.io/tum-gis/ctb-quantized-mesh:latest
+- 輸出：output/penghu_2025_only
+- 結果：terrain 產製完成；使用官方不分幅離島 GeoTIFF，sourceSrs=EPSG:3825
+
+## 2026-05-25 12:36:18 - 金門縣 SUCCESS
+
+- 來源：https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/0e018335-80f1-4489-990c-ecf2bef1a9b6/不分幅_金門20MDEM(2025).zip
+- 來源大小：1647039 bytes
+- GDAL：GDAL 2.4.0, released 2018/12/14
+- Docker：Docker version 29.4.3, build 055a478
+- CTB image：ghcr.io/tum-gis/ctb-quantized-mesh:latest
+- 輸出：output/kinmen_2025_only
+- 結果：terrain 產製完成；使用官方不分幅離島 GeoTIFF，sourceSrs=EPSG:3825
+
+## 2026-05-25 12:51:00 - 澎湖/金門 2025-only 驗證
+
+- 澎湖 manifest：providerId=penghu_2025_only，buildKind=offshore_2025_only，sourceSrs=EPSG:3825，terrainTileCount=2,993，bbox=119.313858,23.1853253,119.7285263,23.8108387。
+- 金門 manifest：providerId=kinmen_2025_only，buildKind=offshore_2025_only，sourceSrs=EPSG:3825，terrainTileCount=575，bbox=118.2063723,24.382249,118.4834125,24.535152。
+- 最新驗證：`node --test tests\*.test.js` 19 tests 通過；`git diff --check` 無 whitespace error，只有 Git LF/CRLF 提醒。

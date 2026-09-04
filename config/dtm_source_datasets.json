@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "description": "DTM 年度來源 CSV registry；由 tools/update-dtm-sources.php 展開成 config/dtm_sources.json。",
+  "description": "DTM 2025-only 正式來源 CSV registry；由 tools/update-dtm-sources.php 展開成 config/dtm_sources.json。2024 與內政部 OLD 只保留在歷史資料中，不進正式 registry。",
   "datasets": [
     {
       "id": "dtm_2025",
@@ -21,7 +21,7 @@
       "defaultRole": "fallback",
       "dataGovUrl": "https://data.gov.tw/dataset/169807",
       "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/91C8DD53-6D5C-48DB-A548-FB27683FBC4B/resource/9F4010ED-4EDD-4347-93EE-A3445AE4AF0D/download",
-      "enabled": true
+      "enabled": false
     },
     {
       "id": "dtm_old_moi",
@@ -31,7 +31,7 @@
       "defaultRole": "fallback",
       "dataGovUrl": "https://data.gov.tw/dataset/35430",
       "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/84CF211B-4788-4FEF-B296-0F292C1DCBB8/resource/279E125C-24C9-41C5-ABE4-B4E8EE506748/download",
-      "enabled": true
+      "enabled": false
     }
   ]
 }

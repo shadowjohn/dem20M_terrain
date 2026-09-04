@@ -5,6 +5,7 @@ param(
 
     [switch] $All,
     [switch] $AllWithTaiwan,
+    [switch] $TaiwanOnly,
     [switch] $FromGrd,
     [switch] $ValidateOnly,
     [switch] $SkipDownload,
@@ -54,28 +55,30 @@ $UnifiedOffshoreSourceConfigs = @(
     [pscustomobject]@{
         id = "penghu_unified"
         providerId = "penghu"
+        providerOutputId = "penghu_2025_only"
         name = "不分幅_澎湖20MDEM(2025)"
         zipName = "penghu_unified-20mdem-2025.zip"
         url = "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/47910269-7315-4cd2-9101-7cdf524b47f5/不分幅_澎湖20MDEM(2025).zip"
         sourceSrs = "EPSG:3825"
         targetSrs = "EPSG:4326"
-        outputDir = "output/penghu"
+        outputDir = "output/penghu_2025_only"
         expectedBytes = 1268059
         sourceNoData = "-32767"
-        buildKind = "county_offshore_unified"
+        buildKind = "offshore_2025_only"
     },
     [pscustomobject]@{
         id = "kinmen_unified"
         providerId = "kinmen"
+        providerOutputId = "kinmen_2025_only"
         name = "不分幅_金門20MDEM(2025)"
         zipName = "kinmen_unified-20mdem-2025.zip"
         url = "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/0e018335-80f1-4489-990c-ecf2bef1a9b6/不分幅_金門20MDEM(2025).zip"
         sourceSrs = "EPSG:3825"
         targetSrs = "EPSG:4326"
-        outputDir = "output/kinmen"
+        outputDir = "output/kinmen_2025_only"
         expectedBytes = 1647039
         sourceNoData = "-32767"
-        buildKind = "county_offshore_unified"
+        buildKind = "offshore_2025_only"
     }
 )
 $UnifiedTaiwanExcludedCountyIds = @($UnifiedOffshoreSourceConfigs | ForEach-Object { $_.providerId })
@@ -702,14 +705,25 @@ function New-ProviderConfigFromSource {
         [Parameter(Mandatory)] $SourceConfig
     )
 
+    $providerId = if ($SourceConfig.PSObject.Properties.Name -contains "providerOutputId" -and $SourceConfig.providerOutputId) {
+        [string]$SourceConfig.providerOutputId
+    } else {
+        [string]$CountyConfig.id
+    }
+    $outputDir = if ($SourceConfig.PSObject.Properties.Name -contains "outputDir" -and $SourceConfig.outputDir) {
+        [string]$SourceConfig.outputDir
+    } else {
+        [string]$CountyConfig.outputDir
+    }
+
     return [pscustomobject]@{
-        id = $CountyConfig.id
+        id = $providerId
         name = $CountyConfig.name
         zipName = $SourceConfig.zipName
         url = $SourceConfig.url
         sourceSrs = $SourceConfig.sourceSrs
         targetSrs = $CountyConfig.targetSrs
-        outputDir = $CountyConfig.outputDir
+        outputDir = $outputDir
         expectedBytes = $SourceConfig.expectedBytes
     }
 }
@@ -1551,14 +1565,14 @@ function Invoke-TaiwanMainBuild {
         id = $MainTaiwanProviderId
         name = "全臺主島"
         zipName = ""
-        url = if ($UnifiedTaiwanRaster) { "taiwan-unified-mainland-vrt" } else { "19-county-mainland-epsg4326-vrt" }
+        url = if ($UnifiedTaiwanRaster) { "taiwan-unified-mainland-2025-only" } else { "19-county-mainland-epsg4326-vrt" }
         sourceSrs = "EPSG:4326"
         targetSrs = "EPSG:4326"
         outputDir = $providerOutputDir
         expectedBytes = 0
     }
-    $buildKind = if ($UnifiedTaiwanRaster) { "taiwan_unified" } else { "taiwan_19_county" }
-    $sourceMode = if ($UnifiedTaiwanRaster) { "不分幅全臺主島" } else { "19 個主島縣市 EPSG:4326 GeoTIFF" }
+    $buildKind = if ($UnifiedTaiwanRaster) { "taiwan_unified_2025_only" } else { "taiwan_19_county" }
+    $sourceMode = if ($UnifiedTaiwanRaster) { "2025-only 不分幅全臺主島；NoData 保留，不用縣市分幅、2024 或 MOI 補洞" } else { "19 個主島縣市 EPSG:4326 GeoTIFF" }
 
     Write-Log "[1/8] 全臺主島 檢查 $sourceMode"
     if ($ValidateOnly) {
@@ -1568,73 +1582,28 @@ function Invoke-TaiwanMainBuild {
 
     $workPath = Join-Path $RepoRoot "data/work/$MainTaiwanProviderId"
     New-Directory -Path $workPath
-    $sourceRasters = @()
-    $usesMoiFullGapFill = $false
 
     if ($UnifiedTaiwanRaster) {
         if (-not (Test-Path -LiteralPath $UnifiedTaiwanRaster)) {
             throw "缺少不分幅全臺 EPSG:4326 GeoTIFF：$UnifiedTaiwanRaster"
         }
 
-        $usesSplitGapFill = $false
-        $usesMoiGapFill = $false
-        $moiFullRasters = @()
-        $moiFullCountyNames = [System.Collections.Generic.List[string]]::new()
-        foreach ($county in $CountyConfigs) {
-            if ($UnifiedTaiwanExcludedCountyIds -contains $county.id) {
-                continue
-            }
+        Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $UnifiedTaiwanRaster -BuildKind $buildKind
+        Add-HistoryEntry -CountyConfig $providerConfig -Status "SUCCESS" -Message "全臺主島 terrain 產製完成；來源模式：$sourceMode" -RemoteInfo $null
 
-            $gapFillSourceConfig = Get-CountyGapFillSourceConfig -CountyId $county.id
-            if ($UseMoiForCounty -and $gapFillSourceConfig) {
-                $moiFullRasterInfo = Invoke-CountyMoiFullRasterBuild -CountyConfig $county
-                if ($moiFullRasterInfo.RasterPath -and (Test-Path -LiteralPath $moiFullRasterInfo.RasterPath)) {
-                    $moiFullRasters += (Get-Item -LiteralPath $moiFullRasterInfo.RasterPath)
-                    $usesMoiFullGapFill = $true
-                    $moiFullCountyNames.Add($county.name)
-                }
-            } elseif ($gapFillSourceConfig) {
-                $gapFillRaster = Invoke-CountyGapFillSourceBuild -CountyConfig $county -SourceConfig $gapFillSourceConfig
-                if ($gapFillRaster -and (Test-Path -LiteralPath $gapFillRaster)) {
-                    $sourceRasters += (Get-Item -LiteralPath $gapFillRaster)
-                    $usesMoiGapFill = $true
-                }
-            }
+        return $UnifiedTaiwanRaster
+    }
 
-            $countyRaster = Get-CountyRasterPath -CountyConfig $county
-            if (-not (Test-Path -LiteralPath $countyRaster)) {
-                throw "缺少 $($county.name) 2025 分幅 EPSG:4326 GeoTIFF，無法補全臺主島缺值：$countyRaster"
-            }
-            $sourceRasters += (Get-Item -LiteralPath $countyRaster)
-            $usesSplitGapFill = $true
+    $sourceRasters = @()
+    foreach ($county in $CountyConfigs) {
+        if ($UnifiedTaiwanExcludedCountyIds -contains $county.id) {
+            continue
         }
-
-        if ($usesSplitGapFill) {
-            $sourceMode = "$sourceMode + 2025縣市分幅缺值補洞"
-            $buildKind = "taiwan_unified_split_gapfill"
+        $countyRaster = Get-CountyRasterPath -CountyConfig $county
+        if (-not (Test-Path -LiteralPath $countyRaster)) {
+            throw "缺少主島縣市 EPSG:4326 GeoTIFF，請先跑縣市產製：$countyRaster"
         }
-        if ($usesMoiGapFill) {
-            $sourceMode = "$sourceMode + 內政部確認缺格補洞"
-            $buildKind = "taiwan_unified_split_moi_gapfill"
-        }
-        if ($usesMoiFullGapFill) {
-            $sourceMode = "$sourceMode + $(Get-MoiFullSourceModeText -CountyNames $moiFullCountyNames.ToArray())"
-            $buildKind = "taiwan_unified_split_moi_full_gapfill"
-        }
-        $sourceRasters += (Get-Item -LiteralPath $UnifiedTaiwanRaster)
-        # gdalbuildvrt 以後列來源為優先，MOI full 必須最後加入，才能壓過 2025 不分幅的異常有效值。
-        $sourceRasters += $moiFullRasters
-    } else {
-        foreach ($county in $CountyConfigs) {
-            if ($UnifiedTaiwanExcludedCountyIds -contains $county.id) {
-                continue
-            }
-            $countyRaster = Get-CountyRasterPath -CountyConfig $county
-            if (-not (Test-Path -LiteralPath $countyRaster)) {
-                throw "缺少主島縣市 EPSG:4326 GeoTIFF，請先跑縣市產製：$countyRaster"
-            }
-            $sourceRasters += (Get-Item -LiteralPath $countyRaster)
-        }
+        $sourceRasters += (Get-Item -LiteralPath $countyRaster)
     }
 
     if ($sourceRasters.Count -lt 1) {
@@ -1652,15 +1621,10 @@ function Invoke-TaiwanMainBuild {
         $taiwanVrt
     ) -ProgressMessage "[5/8] 全臺主島 gdalbuildvrt 建立全臺主島 VRT"
 
-    $terrainRaster = $taiwanVrt
-    if ($usesMoiFullGapFill) {
-        $terrainRaster = Build-CompositeRaster -ProviderName "全臺主島" -SourceRasters $sourceRasters -ReferenceRaster $taiwanVrt -TargetRaster (Join-Path $workPath "$MainTaiwanProviderId-moi-full-composite-4326.tif")
-    }
-
-    Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $terrainRaster -BuildKind $buildKind
+    Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $taiwanVrt -BuildKind $buildKind
     Add-HistoryEntry -CountyConfig $providerConfig -Status "SUCCESS" -Message "全臺主島 terrain 產製完成；來源模式：$sourceMode" -RemoteInfo $null
 
-    return $terrainRaster
+    return $taiwanVrt
 }
 
 function Invoke-AllTaiwanBuild {
@@ -1681,9 +1645,9 @@ function Invoke-AllTaiwanBuild {
         outputDir = $providerOutputDir
         expectedBytes = 0
     }
-    $buildKind = if ($UnifiedTaiwanRaster) { "all_taiwan_unified" } else { "all_taiwan" }
+    $buildKind = if ($UnifiedTaiwanRaster) { "all_taiwan_unified_2025_only" } else { "all_taiwan" }
 
-    $sourceMode = if ($UnifiedTaiwanRaster) { "不分幅全臺主島 + 不分幅離島" } else { "21 個縣市 EPSG:4326 GeoTIFF" }
+    $sourceMode = if ($UnifiedTaiwanRaster) { "2025-only 不分幅全臺主島 + 2025 不分幅離島；NoData 保留，不用縣市分幅、2024 或 MOI 補洞" } else { "21 個縣市 EPSG:4326 GeoTIFF" }
     Write-Log "[1/8] 全臺含外島 檢查 $sourceMode"
     if ($ValidateOnly) {
         Write-Log "[1/8] 全臺含外島 validate-only：正式產製時會從 $sourceMode 建立 all_taiwan"
@@ -1693,55 +1657,9 @@ function Invoke-AllTaiwanBuild {
     $workPath = Join-Path $RepoRoot "data/work/$TaiwanProviderId"
     New-Directory -Path $workPath
     $sourceRasters = @()
-    $usesMoiFullGapFill = $false
     if ($UnifiedTaiwanRaster) {
         if (-not (Test-Path -LiteralPath $UnifiedTaiwanRaster)) {
             throw "缺少不分幅全臺 EPSG:4326 GeoTIFF：$UnifiedTaiwanRaster"
-        }
-        $usesSplitGapFill = $false
-        $usesMoiGapFill = $false
-        $moiFullRasters = @()
-        $moiFullCountyNames = [System.Collections.Generic.List[string]]::new()
-        foreach ($county in $CountyConfigs) {
-            if ($UnifiedTaiwanExcludedCountyIds -contains $county.id) {
-                continue
-            }
-            $gapFillSourceConfig = Get-CountyGapFillSourceConfig -CountyId $county.id
-            if ($UseMoiForCounty -and $gapFillSourceConfig) {
-                $moiFullRasterInfo = Invoke-CountyMoiFullRasterBuild -CountyConfig $county
-                if ($moiFullRasterInfo.RasterPath -and (Test-Path -LiteralPath $moiFullRasterInfo.RasterPath)) {
-                    $moiFullRasters += (Get-Item -LiteralPath $moiFullRasterInfo.RasterPath)
-                    $usesMoiFullGapFill = $true
-                    $moiFullCountyNames.Add($county.name)
-                }
-            } elseif (-not $gapFillSourceConfig) {
-                $gapFillRaster = ""
-            } else {
-                $gapFillRaster = Invoke-CountyGapFillSourceBuild -CountyConfig $county -SourceConfig $gapFillSourceConfig
-                if ($gapFillRaster -and (Test-Path -LiteralPath $gapFillRaster)) {
-                    $sourceRasters += (Get-Item -LiteralPath $gapFillRaster)
-                    $usesMoiGapFill = $true
-                }
-            }
-
-            $countyRaster = Get-CountyRasterPath -CountyConfig $county
-            if (-not (Test-Path -LiteralPath $countyRaster)) {
-                throw "缺少 $($county.name) 2025 分幅 EPSG:4326 GeoTIFF，無法補不分幅缺值：$countyRaster"
-            }
-            $sourceRasters += (Get-Item -LiteralPath $countyRaster)
-            $usesSplitGapFill = $true
-        }
-        if ($usesSplitGapFill) {
-            $sourceMode = "$sourceMode + 2025縣市分幅缺值補洞"
-            $buildKind = "all_taiwan_unified_split_gapfill"
-        }
-        if ($usesMoiGapFill) {
-            $sourceMode = "$sourceMode + 內政部確認缺格補洞"
-            $buildKind = "all_taiwan_unified_split_moi_gapfill"
-        }
-        if ($usesMoiFullGapFill) {
-            $sourceMode = "$sourceMode + $(Get-MoiFullSourceModeText -CountyNames $moiFullCountyNames.ToArray())"
-            $buildKind = "all_taiwan_unified_split_moi_full_gapfill"
         }
         $sourceRasters += (Get-Item -LiteralPath $UnifiedTaiwanRaster)
     }
@@ -1772,8 +1690,6 @@ function Invoke-AllTaiwanBuild {
                 $sourceRasters += (Get-Item -LiteralPath $offshoreRaster)
             }
         }
-        # gdalbuildvrt 以後列來源為優先，MOI full 必須最後加入，才能壓過 2025 不分幅的異常有效值。
-        $sourceRasters += $moiFullRasters
     }
 
     if (-not $UnifiedTaiwanRaster -and $sourceRasters.Count -ne 21) {
@@ -1791,15 +1707,10 @@ function Invoke-AllTaiwanBuild {
         $taiwanVrt
     ) -ProgressMessage "[5/8] 全臺含外島 gdalbuildvrt 建立全臺 VRT"
 
-    $terrainRaster = $taiwanVrt
-    if ($usesMoiFullGapFill) {
-        $terrainRaster = Build-CompositeRaster -ProviderName "全臺含外島" -SourceRasters $sourceRasters -ReferenceRaster $taiwanVrt -TargetRaster (Join-Path $workPath "$TaiwanProviderId-moi-full-composite-4326.tif")
-    }
-
-    Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $terrainRaster -BuildKind $buildKind
+    Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $taiwanVrt -BuildKind $buildKind
     Add-HistoryEntry -CountyConfig $providerConfig -Status "SUCCESS" -Message "全臺含外島 terrain 產製完成；來源模式：$sourceMode" -RemoteInfo $null
 
-    return $terrainRaster
+    return $taiwanVrt
 }
 
 function Invoke-FromGrdTaiwanBuild {
@@ -2088,8 +1999,36 @@ function Main {
     if ($FromGrd -and -not $AllWithTaiwan) {
         throw "-FromGrd 需要搭配 -AllWithTaiwan，會建立 taiwan_from_grd 與 all_taiwan_from_grd"
     }
+    if ($TaiwanOnly -and ($All -or $AllWithTaiwan -or $FromGrd -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
+        throw "-TaiwanOnly 只建立 output/taiwan，固定使用 2025 不分幅全臺主島來源；請不要搭配 -All、-AllWithTaiwan、-FromGrd、-UseMoiForCounty、-SkipUnifiedTaiwanSource 或 -County"
+    }
     if ($FromGrd -and $hasRequestedCountyIds) {
         Write-Log "-FromGrd 固定建立完整 taiwan_from_grd/all_taiwan_from_grd，忽略 -County 篩選並掃描全部縣市來源"
+    }
+
+    if ($TaiwanOnly) {
+        try {
+            $unifiedTaiwanRaster = Invoke-UnifiedTaiwanSourceBuild
+            if (-not $ValidateOnly) {
+                Invoke-TaiwanMainBuild -CountyConfigs @() -UnifiedTaiwanRaster $unifiedTaiwanRaster
+            }
+        } catch {
+            if (-not $ValidateOnly) {
+                $providerConfig = [pscustomobject]@{
+                    id = $MainTaiwanProviderId
+                    name = "全臺主島"
+                    url = "taiwan-unified-mainland-2025-only"
+                    sourceSrs = "EPSG:4326"
+                    targetSrs = "EPSG:4326"
+                    outputDir = "output/$MainTaiwanProviderId"
+                    expectedBytes = 0
+                }
+                Add-HistoryEntry -CountyConfig $providerConfig -Status "FAILED" -Message $_.Exception.Message -RemoteInfo $null
+            }
+            throw
+        }
+        Write-Log "terrain pipeline 結束"
+        return
     }
 
     $selected = if ($FromGrd -or $All -or -not $hasRequestedCountyIds) {
@@ -2101,6 +2040,9 @@ function Main {
     if ($UseMoiForCounty) {
         if (-not $hasRequestedCountyIds) {
             throw "-UseMoiForCounty 需要搭配 -County 指定縣市，避免不小心整批重轉"
+        }
+        if ($AllWithTaiwan) {
+            throw "-UseMoiForCounty 只保留給 output/<county>_moi 診斷輸出；正式 taiwan/all_taiwan 不再合併 MOI 補洞"
         }
 
         if (-not $AllWithTaiwan) {
@@ -2131,7 +2073,7 @@ function Main {
 
     $useSubsetForAllWithTaiwan = ($AllWithTaiwan -and $hasRequestedCountyIds -and -not $All -and -not $FromGrd)
     $taiwanSourceCounties = if ($useSubsetForAllWithTaiwan) {
-        Write-Log "AllWithTaiwan 指定縣市模式：只重建 $($selected.id -join ', ')；全臺仍使用不分幅主島、必要縣市補洞與不分幅離島來源"
+        Write-Log "AllWithTaiwan 指定縣市模式：只重建 $($selected.id -join ', ')；全臺仍使用 2025-only 不分幅主島與不分幅離島來源"
         $selected
     } else {
         $counties
@@ -2176,9 +2118,7 @@ function Main {
                 $mainTaiwanRaster = Invoke-TaiwanMainBuild -CountyConfigs $taiwanSourceCounties -UnifiedTaiwanRaster $unifiedTaiwanRaster
                 $taiwanRaster = Invoke-AllTaiwanBuild -CountyConfigs $taiwanSourceCounties -UnifiedTaiwanRaster $unifiedTaiwanRaster -UnifiedOffshoreRasterByCounty $unifiedOffshoreRasterByCounty
                 if (-not $ValidateOnly) {
-                    if ($UseMoiForCounty) {
-                        Write-Log "[7/8] 已指定 -UseMoiForCounty + -AllWithTaiwan：只重建 taiwan/all_taiwan，略過縣市 provider 重建"
-                    } elseif ($unifiedTaiwanRaster) {
+                    if ($unifiedTaiwanRaster) {
                         Invoke-CountyUnifiedProviderBuild -CountyConfigs $selected -UnifiedTaiwanRaster $unifiedTaiwanRaster -UnifiedOffshoreRasterByCounty $unifiedOffshoreRasterByCounty
                     } else {
                         Invoke-CountyMosaicProviderBuild -CountyConfigs $selected -TaiwanRaster $mainTaiwanRaster -UnifiedOffshoreRasterByCounty $unifiedOffshoreRasterByCounty

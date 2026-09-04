@@ -4,10 +4,8 @@ declare(strict_types=1);
 /**
  * 從 data.gov.tw / opdadm.moi.gov.tw 的官方 CSV 重新產生 DTM source registry。
  *
- * V1.1 先鎖定三套來源：
- * - 2025 DTM：主資料
- * - 2024 DTM：補缺來源
- * - 內政部 OLD DTM：再補缺來源
+ * V2 只把 2025 DTM 納入正式 registry。
+ * 2024 與內政部 OLD 來源只留作歷史診斷，不再產生正式補洞來源。
  */
 
 setlocale(LC_ALL, 'C');
@@ -89,8 +87,8 @@ uasort($sources, 'compareSource');
 
 $out = [
     'schemaVersion' => 1,
-    'policy' => '2025 > 2024 > OLD > GLOBAL_RESERVED',
-    'description' => 'DTM 版本整併庫 source registry；由官方 CSV 產生，catalog builder 只盤點來源與 tile bbox coverage。',
+    'policy' => '2025_ONLY',
+    'description' => 'DTM 2025-only source registry；由官方 CSV 產生，正式 terrain 不再混用 2024 或內政部 OLD 補洞。',
     'generatedAt' => gmdate('c'),
     'datasets' => $datasetSummaries,
     'sources' => array_values($sources),
