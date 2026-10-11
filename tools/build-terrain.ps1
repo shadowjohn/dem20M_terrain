@@ -6,6 +6,7 @@ param(
     [switch] $All,
     [switch] $AllWithTaiwan,
     [switch] $TaiwanOnly,
+    [switch] $AllTaiwan2026,
     [switch] $ExportAllTaiwanGeoTiff,
     [switch] $FromGrd,
     [switch] $ValidateOnly,
@@ -35,6 +36,7 @@ $RunStamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $LogPath = Join-Path $LogDir "build-$RunStamp.log"
 $CtbCommandText = "ctb-tile -f Mesh -p geodetic -C"
 $TaiwanProviderId = "all_taiwan"
+$AllTaiwan2026ProviderId = "all_taiwan_2026"
 $MainTaiwanProviderId = "taiwan"
 $FromGrdTaiwanProviderId = "taiwan_from_grd"
 $FromGrdAllTaiwanProviderId = "all_taiwan_from_grd"
@@ -1788,6 +1790,31 @@ function Invoke-AllTaiwanBuild {
     return $taiwanVrt
 }
 
+function Invoke-AllTaiwan2026Build {
+    param(
+        [Parameter(Mandatory)][string] $AllTaiwanRaster
+    )
+
+    if (-not (Test-Path -LiteralPath $AllTaiwanRaster)) {
+        throw "缺少 2026 全臺 GeoTIFF：$AllTaiwanRaster"
+    }
+
+    $providerConfig = [pscustomobject]@{
+        id = $AllTaiwan2026ProviderId
+        name = "全臺含外島（2026 主島＋2025 已驗證離島）"
+        zipName = ""
+        url = "2026-mainland-2025-verified-offshore-geotiff"
+        sourceSrs = "EPSG:4326"
+        targetSrs = "EPSG:4326"
+        outputDir = "output/$AllTaiwan2026ProviderId"
+        expectedBytes = 0
+    }
+
+    Write-Log "[1/8] 全臺含外島（2026）從已驗證 GeoTIFF 建立獨立 provider"
+    Build-TerrainProvider -ProviderConfig $providerConfig -RasterPath $AllTaiwanRaster -BuildKind "all_taiwan_unified_2026_mainland_2025_offshore"
+    Add-HistoryEntry -CountyConfig $providerConfig -Status "SUCCESS" -Message "全臺含外島 2026 terrain 產製完成；來源模式：2026 主島 + 2025 已驗證離島；NoData 保留。" -RemoteInfo $null
+}
+
 function Invoke-FromGrdTaiwanBuild {
     param(
         [Parameter(Mandatory)] $CountyConfigs,
@@ -2071,8 +2098,11 @@ function Main {
         Assert-DockerDaemon
     }
 
-    if ($ExportAllTaiwanGeoTiff -and ($All -or $AllWithTaiwan -or $TaiwanOnly -or $FromGrd -or $ValidateOnly -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
+    if ($ExportAllTaiwanGeoTiff -and ($All -or $AllWithTaiwan -or $TaiwanOnly -or $AllTaiwan2026 -or $FromGrd -or $ValidateOnly -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
         throw "-ExportAllTaiwanGeoTiff 只匯出 2026 主島 + 2025 已驗證離島 GeoTIFF；請不要搭配 terrain、驗證、補洞或縣市參數"
+    }
+    if ($AllTaiwan2026 -and ($All -or $AllWithTaiwan -or $TaiwanOnly -or $ExportAllTaiwanGeoTiff -or $FromGrd -or $ValidateOnly -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
+        throw "-AllTaiwan2026 只建立 output/all_taiwan_2026；請不要搭配其他 terrain、驗證、補洞或縣市參數"
     }
     if ($FromGrd -and -not $AllWithTaiwan) {
         throw "-FromGrd 需要搭配 -AllWithTaiwan，會建立 taiwan_from_grd 與 all_taiwan_from_grd"
@@ -2092,6 +2122,32 @@ function Main {
         }
         $exportPath = Export-AllTaiwanGeoTiff -MainlandRaster $unifiedTaiwanRaster -OffshoreRasters $unifiedOffshoreRasterByCounty
         Write-Log "全臺 GeoTIFF 匯出結束：$exportPath"
+        return
+    }
+
+    if ($AllTaiwan2026) {
+        try {
+            $unifiedTaiwanRaster = Invoke-UnifiedTaiwanSourceBuild
+            $unifiedOffshoreRasterByCounty = @{}
+            foreach ($offshoreSourceConfig in $UnifiedOffshoreSourceConfigs) {
+                $unifiedOffshoreRasterByCounty[$offshoreSourceConfig.providerId] = Invoke-UnifiedGeoTiffSourceBuild -SourceConfig $offshoreSourceConfig
+            }
+            $allTaiwanRaster = Export-AllTaiwanGeoTiff -MainlandRaster $unifiedTaiwanRaster -OffshoreRasters $unifiedOffshoreRasterByCounty
+            Invoke-AllTaiwan2026Build -AllTaiwanRaster $allTaiwanRaster
+        } catch {
+            $providerConfig = [pscustomobject]@{
+                id = $AllTaiwan2026ProviderId
+                name = "全臺含外島（2026 主島＋2025 已驗證離島）"
+                url = "2026-mainland-2025-verified-offshore-geotiff"
+                sourceSrs = "EPSG:4326"
+                targetSrs = "EPSG:4326"
+                outputDir = "output/$AllTaiwan2026ProviderId"
+                expectedBytes = 0
+            }
+            Add-HistoryEntry -CountyConfig $providerConfig -Status "FAILED" -Message $_.Exception.Message -RemoteInfo $null
+            throw
+        }
+        Write-Log "terrain pipeline 結束"
         return
     }
 

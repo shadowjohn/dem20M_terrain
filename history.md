@@ -540,3 +540,13 @@
 - 不採 2026 澎湖、金門分幅；官方 2026 CSV 的澎湖分幅連結仍指向 2025 檔案，僅保留為診斷來源。
 - 輸出：`output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`。
 - 驗證：EPSG:4326、20,304 × 18,192、Float32、LZW、NoData=-32768；主島（120.993, 23.800）、澎湖（119.566, 23.570）、金門（118.340, 24.440）抽樣皆為有效高程。
+
+## 2026-10-11 17:17:38 - 全臺含外島（2026 主島＋2025 已驗證離島） SUCCESS
+
+- 來源：2026-mainland-2025-verified-offshore-geotiff
+- 來源大小：0 bytes
+- GDAL：GDAL 2.4.0, released 2018/12/14
+- Docker：Docker version 29.7.2, build a7dcaa6
+- CTB image：ghcr.io/tum-gis/ctb-quantized-mesh:latest
+- 輸出：output/all_taiwan_2026
+- 結果：全臺含外島 2026 terrain 產製完成；來源模式：2026 主島 + 2025 已驗證離島；NoData 保留。

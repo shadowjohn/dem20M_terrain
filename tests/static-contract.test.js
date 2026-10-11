@@ -129,6 +129,7 @@ test("build script builds 2026 mainland with trusted 2025 offshore sources witho
   const script = readText("tools/build-terrain.ps1");
 
   assert.match(script, /\[switch\] \$TaiwanOnly/);
+  assert.match(script, /\[switch\] \$AllTaiwan2026/);
   assert.match(script, /\[switch\] \$ExportAllTaiwanGeoTiff/);
   assert.match(script, /\[switch\] \$AllWithTaiwan/);
   assert.match(script, /\[switch\] \$FromGrd/);
@@ -138,6 +139,7 @@ test("build script builds 2026 mainland with trusted 2025 offshore sources witho
   assert.match(script, /\$FromGrdAllTaiwanProviderId = "all_taiwan_from_grd"/);
   assert.match(script, /function Invoke-TaiwanMainBuild/);
   assert.match(script, /function Invoke-AllTaiwanBuild/);
+  assert.match(script, /function Invoke-AllTaiwan2026Build/);
   assert.match(script, /function Invoke-FromGrdTaiwanBuild/);
   assert.match(script, /function Invoke-UnifiedTaiwanSourceBuild/);
   assert.match(script, /function Build-CountyMosaicRaster/);
@@ -156,6 +158,7 @@ test("build script builds 2026 mainland with trusted 2025 offshore sources witho
   assert.match(script, /function Invoke-UnifiedGeoTiffSourceBuild/);
   assert.match(script, /function Export-AllTaiwanGeoTiff/);
   assert.match(script, /all_taiwan_20m_2026_mainland_2025_offshore_epsg4326\.tif/);
+  assert.match(script, /output\/all_taiwan_2026/);
   assert.match(script, /function Get-OffshoreUnifiedSourceConfig/);
   assert.match(script, /providerOutputId = "penghu_2025_only"/);
   assert.match(script, /providerOutputId = "kinmen_2025_only"/);
@@ -211,6 +214,28 @@ test("build script builds 2026 mainland with trusted 2025 offshore sources witho
   assert.match(script, /正式 terrain 禁止使用 2025 分幅錯包來源/);
   assert.doesNotMatch(script, /county_split_source/);
   assert.match(script, /"-te", \$bbox\[0\], \$bbox\[1\], \$bbox\[2\], \$bbox\[3\]/);
+});
+
+const terrainDemoRoot = process.env.TERRAIN_DEMO_ROOT || "Z:\\demo\\htm\\map\\3D\\terrain_demo";
+const terrainDemoTest = fs.existsSync(terrainDemoRoot) ? test : test.skip;
+
+function readTerrainDemoText(relativePath) {
+  return fs.readFileSync(path.join(terrainDemoRoot, relativePath), "utf8");
+}
+
+terrainDemoTest("deployed terrain demo separates 2025 and 2026 providers with version tabs", () => {
+  const index = readTerrainDemoText("index.php");
+  const app = readTerrainDemoText(path.join("js", "app.js"));
+  const config = readTerrainDemoText(path.join("js", "terrain_config.js"));
+
+  assert.match(index, /id="terrainVersionTabs"/);
+  assert.match(config, /terrainVersions/);
+  assert.match(config, /id: "2025"/);
+  assert.match(config, /id: "2026"/);
+  assert.match(config, /\/data\/terrain20M_2026\/all_taiwan/);
+  assert.match(app, /selectedTerrainVersionId/);
+  assert.match(app, /buildTerrainVersionTabs/);
+  assert.match(app, /getActiveTerrainVersion/);
 });
 
 test("build script publishes terrain atomically and resumes only valid output", () => {

@@ -10,6 +10,7 @@
 - GDAL 中繼：`data/work/<county>/`
 - 全臺主島 terrain：`output/taiwan`；正式來源只用 2026 `不分幅_全台20MDEM(2026)`
 - 全臺含外島 terrain：`output/all_taiwan`；若需要才重建，來源為 2026 主島＋已驗證的 2025 澎湖、金門
+- 2026 展示用全臺 terrain：`output/all_taiwan_2026`；與舊 provider 分開產製，供 `/data/terrain20M_2026/all_taiwan` 發布
 - 全臺 GeoTIFF：`output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`；不啟動 Docker 或 terrain 重建
 - 澎湖 2025-only terrain：`output/penghu_2025_only`；正式來源只用 2025 `不分幅_澎湖20MDEM(2025)`
 - 金門 2025-only terrain：`output/kinmen_2025_only`；正式來源只用 2025 `不分幅_金門20MDEM(2025)`
@@ -119,6 +120,14 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -Tai
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -ExportAllTaiwanGeoTiff
 ```
 
+正式產製獨立的 2026 全臺含外島 provider（不覆蓋既有 `output/all_taiwan`）：
+
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllTaiwan2026 -SkipDownload
+```
+
+會從已驗證的 2026 主島＋2025 澎湖、金門 GeoTIFF 建立 `output/all_taiwan_2026`；部署目標為 `/data/terrain20M_2026/all_taiwan`。
+
 正式產製縣市、全臺主島與全臺含外島 provider；通常只有需要重建全套展示資料時才用：
 
 ```powershell
@@ -180,8 +189,9 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 7. 將來源合併後轉成 `EPSG:4326` GeoTIFF。
 8. `-TaiwanOnly` 下載 2026 官方不分幅全臺 TIF，轉成 `data/work/taiwan_unified_2026/taiwan_unified_2026-4326.tif`。
 9. `-ExportAllTaiwanGeoTiff` 將 2026 主島與已驗證的 2025 澎湖、金門合併成 `output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`；NoData 保留，不補、不混。
-10. 澎湖、金門離島 provider 直接使用 2025 官方不分幅離島 GeoTIFF，輸出到 `output/penghu_2025_only`、`output/kinmen_2025_only`。
-11. 用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
+10. `-AllTaiwan2026` 只從該 GeoTIFF 產出獨立 `output/all_taiwan_2026`，不觸碰舊的 `output/all_taiwan`。
+11. 澎湖、金門離島 provider 直接使用 2025 官方不分幅離島 GeoTIFF，輸出到 `output/penghu_2025_only`、`output/kinmen_2025_only`。
+12. 用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
 12. 將 `.terrain.gz` 或 gzip 內容的 `.terrain` 正規化成未壓縮 `.terrain`，避免 Web Server 沒送 `Content-Encoding: gzip` 時 Cesium 讀壞。
 13. 使用 raster metadata 回寫 `layer.json` 的實際 `bounds`。
 14. 寫出 `build-manifest.json`，記錄來源、bbox、tile 數、zoom levels、GDAL/Docker/CTB 設定。
