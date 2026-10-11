@@ -4,8 +4,8 @@ declare(strict_types=1);
 /**
  * 從 data.gov.tw / opdadm.moi.gov.tw 的官方 CSV 重新產生 DTM source registry。
  *
- * V2 只把 2025 DTM 納入正式 registry。
- * 2024 與內政部 OLD 來源只留作歷史診斷，不再產生正式補洞來源。
+ * V3 將 2026 DTM 納入正式 registry。
+ * 澎湖、金門 2026 分幅只保留作診斷；全臺成果固定使用已驗證的 2025 不分幅離島來源。
  */
 
 setlocale(LC_ALL, 'C');
@@ -87,8 +87,8 @@ uasort($sources, 'compareSource');
 
 $out = [
     'schemaVersion' => 1,
-    'policy' => '2025_ONLY',
-    'description' => 'DTM 2025-only source registry；由官方 CSV 產生，正式 terrain 不再混用 2024 或內政部 OLD 補洞。',
+    'policy' => '2026_MAINLAND_2025_OFFSHORE',
+    'description' => 'DTM 2026 主島 source registry；全臺成果的澎湖、金門固定使用已驗證的 2025 不分幅 GeoTIFF，不採 2026 分幅離島來源。',
     'generatedAt' => gmdate('c'),
     'datasets' => $datasetSummaries,
     'sources' => array_values($sources),
@@ -234,11 +234,11 @@ function sourceFromCsvRow(array $dataset, array $row): ?array
         $sourcePriority = $priority;
         $id = 'dtm_' . strtolower($version) . '_' . $countyId;
         $note = '';
-        if ($version === '2025' && in_array($countyId, ['penghu', 'kinmen'], true)) {
+        if (in_array($version, ['2025', '2026'], true) && in_array($countyId, ['penghu', 'kinmen'], true)) {
             $role = 'diagnostic';
             $sourcePriority = 90;
             $id .= '_split_diagnostic';
-            $note = $countyName . ' 2025 分幅保留為診斷來源；正式 coverage/best-source 以不分幅離島來源為準。';
+            $note = $countyName . ' ' . $version . ' 分幅保留為診斷來源；正式全臺成果固定使用已驗證的 2025 不分幅離島 GeoTIFF。';
         }
         if ($version === 'OLD') {
             $id = 'dtm_old_' . $countyId;
@@ -442,7 +442,7 @@ function buildSource(
 
 function compareSource(array $a, array $b): int
 {
-    $versionOrder = ['2025' => 1, '2024' => 2, 'OLD' => 3, 'GLOBAL_RESERVED' => 99];
+    $versionOrder = ['2026' => 1, '2025' => 2, '2024' => 3, 'OLD' => 4, 'GLOBAL_RESERVED' => 99];
     $av = $versionOrder[$a['version']] ?? 50;
     $bv = $versionOrder[$b['version']] ?? 50;
     if ($av !== $bv) {

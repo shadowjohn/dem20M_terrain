@@ -1,15 +1,17 @@
 # dem20M_terrain
 
-本專案將 2025 年版 20M DTM 轉成 Cesium quantized-mesh terrain，目標是讓產線可以穩定重跑、續跑、驗證與發布。
+本專案將 2026 年版 20M DTM 轉成 Cesium quantized-mesh terrain，目標是讓產線可以穩定重跑、續跑、驗證與發布。
 
-正式產線回歸 `2025年版全臺灣20公尺網格數值地形模型DTM資料`。台灣本島 `output/taiwan` 只使用官方 `不分幅_全台20MDEM(2025)`，有 NoData 就保留 NoData；不再混用 2024、內政部 OLD、MOI full、或 2025 縣市分幅補洞。
+正式主島來源是 `2026年版全臺灣20公尺網格數值地形模型DTM資料` 的 `不分幅_全台20MDEM(2026)`；澎湖、金門固定使用已驗證的 2025 不分幅 GeoTIFF。各來源的 NoData 原樣保留，不混入 2024、內政部 OLD、MOI full 或縣市分幅補洞。
 
 ## 產出
 
 - 來源資料：`data/raw/<county>/`
 - GDAL 中繼：`data/work/<county>/`
-- 全臺主島 terrain：`output/taiwan`；正式來源只用 2025 `不分幅_全台20MDEM(2025)`
-- 全臺含外島 terrain：`output/all_taiwan`；若需要才重建，來源為 2025 不分幅台灣、澎湖、金門，不混舊資料
+- 全臺主島 terrain：`output/taiwan`；正式來源只用 2026 `不分幅_全台20MDEM(2026)`
+- 全臺含外島 terrain：`output/all_taiwan`；若需要才重建，來源為 2026 主島＋已驗證的 2025 澎湖、金門
+- 2026 展示用全臺 terrain：`output/all_taiwan_2026`；與舊 provider 分開產製，供 `/data/terrain20M_2026/all_taiwan` 發布
+- 全臺 GeoTIFF：`output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`；不啟動 Docker 或 terrain 重建
 - 澎湖 2025-only terrain：`output/penghu_2025_only`；正式來源只用 2025 `不分幅_澎湖20MDEM(2025)`
 - 金門 2025-only terrain：`output/kinmen_2025_only`；正式來源只用 2025 `不分幅_金門20MDEM(2025)`
 - 縣市 terrain：`output/<county>`；縣市分幅可保留作診斷或獨立 provider，不用來補正式 `taiwan`
@@ -31,38 +33,39 @@ output/all_taiwan/
 
 ## 目前定版
 
-2026-05-25 起，正式台灣本島 provider 改為 2025-only：
+2026-10-11 起，正式台灣本島 provider 改為 2026-only；全臺 GeoTIFF 與全臺 terrain 則採 2026 主島＋2025 已驗證離島：
 
-- `taiwan`：只使用 `不分幅_全台20MDEM(2025)` 轉出的 `data/work/taiwan_unified/taiwan_unified-4326.tif`，buildKind 為 `taiwan_unified_2025_only`。
+- `taiwan`：只使用 `不分幅_全台20MDEM(2026)` 轉出的 `data/work/taiwan_unified_2026/taiwan_unified_2026-4326.tif`，buildKind 為 `taiwan_unified_2026_only`。
 - `penghu_2025_only`：只使用 `不分幅_澎湖20MDEM(2025)` 轉出的 `data/work/penghu_unified/penghu_unified-4326.tif`，buildKind 為 `offshore_2025_only`。
 - `kinmen_2025_only`：只使用 `不分幅_金門20MDEM(2025)` 轉出的 `data/work/kinmen_unified/kinmen_unified-4326.tif`，buildKind 為 `offshore_2025_only`。
-- `all_taiwan`：保留為可選 provider；來源只允許 2025 不分幅台灣、澎湖、金門，buildKind 為 `all_taiwan_unified_2025_only`。
+- `all_taiwan`：保留為可選 provider；來源為 2026 不分幅主島＋2025 已驗證不分幅離島，buildKind 為 `all_taiwan_unified_2026_mainland_2025_offshore`。
+- `-ExportAllTaiwanGeoTiff`：只交付 `all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`，不覆蓋 terrain provider。
 - 舊的 `*-moi-full-composite-4326.tif` 僅視為歷史產物或診斷比對，不再作為正式來源。
 
-這版的關鍵不是補洞，而是資料責任清楚：官方 2025 有洞就有洞，terrain 與建物貼地都以實際資料為主。
+這版的關鍵不是補洞，而是資料責任清楚：官方 2026 主島有洞就有洞，terrain 與建物貼地都以實際資料為主；離島沿用已驗證的 2025 不分幅成果。
 
 ## 資料來源
 
-- 主要來源：政府資料開放平臺 [2025年版全臺灣20公尺網格數值地形模型DTM資料](https://data.gov.tw/dataset/176927)
-- 主要下載清單：3WA 筆記 [2025 20M DEM TGOS 下載清單](https://3wa.tw/mypaper/?uid=shadow&mode=view&id=2695)
+- 主要來源：政府資料開放平臺 [2026年版全臺灣20公尺網格數值地形模型DTM資料](https://data.gov.tw/dataset/178729)
+- 離島來源：政府資料開放平臺 [2025年版全臺灣20公尺網格數值地形模型DTM資料](https://data.gov.tw/dataset/176927)
 
-正式產線目前只使用下列 2025 不分幅來源：
+正式全臺成果只使用下列來源：
 
-- `不分幅_全台20MDEM(2025)`
+- `不分幅_全台20MDEM(2026)`
 - `不分幅_澎湖20MDEM(2025)`，只在重建 `all_taiwan` 或離島 provider 時使用
 - `不分幅_金門20MDEM(2025)`，只在重建 `all_taiwan` 或離島 provider 時使用
 
 主島來源座標以 `EPSG:3826` 處理；澎湖、金門這類 119 度分帶資料以 `EPSG:3825` 處理。2024 與內政部 OLD 可以留在歷史研究筆記中比對，不進正式 `taiwan` provider。
 
-## DTM 2025-Only Registry
+## DTM 2026 主島 Registry
 
-registry 的正式 policy 是 `2025_ONLY`。`config/dtm_source_datasets.json` 保留 2024 與內政部 OLD 的資料集設定，但設為 disabled；`tools/update-dtm-sources.php` 只會把 2025 來源展開到 `config/dtm_sources.json`。
+registry 的正式 policy 是 `2026_MAINLAND_2025_OFFSHORE`。`config/dtm_source_datasets.json` 保留 2024 與內政部 OLD 的資料集設定，但設為 disabled；2026 澎湖、金門分幅只保留為診斷來源，正式全臺成果固定使用已驗證的 2025 不分幅離島 GeoTIFF。
 
-重新產生 2025-only registry：
+重新產生 2026 registry：
 
 ```powershell
 php .\tools\update-dtm-sources.php --datasets .\config\dtm_source_datasets.json --out .\config\dtm_sources.json
-php .\tools\download-dtm-sources.php --source .\config\dtm_sources.json --only 2025
+php .\tools\download-dtm-sources.php --source .\config\dtm_sources.json --only 2026
 ```
 
 下載器只抓 zip 到 `data/raw/`，不解壓、不建 catalog。官方年度 CSV 也會快取到 `data/source-catalog/`，方便追來源異動。
@@ -89,7 +92,7 @@ SQLite 主要表與 view：
 - `v_overlap_tiles`
 - `v_coverage_summary`
 
-`check_grd.html` 會讀 `data/coverage/index.json` 顯示 Coverage 模式。歷史 coverage 仍可能包含 2024/內政部診斷圖層；正式 2025-only 產線不使用那些來源補洞。
+`check_grd.html` 會讀 `data/coverage/index.json` 顯示 Coverage 模式。歷史 coverage 仍可能包含 2025、2024 與內政部診斷圖層；正式 2026 主島產線不使用那些來源補洞。
 
 ## 必要工具
 
@@ -105,11 +108,25 @@ SQLite 主要表與 view：
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All -ValidateOnly
 ```
 
-正式產製台灣本島 2025-only provider：
+正式產製台灣本島 2026-only provider：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -TaiwanOnly
 ```
+
+只交付全臺 GeoTIFF（2026 主島＋已驗證 2025 澎湖、金門；不啟動 Docker、不中斷既有 terrain provider）：
+
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -ExportAllTaiwanGeoTiff
+```
+
+正式產製獨立的 2026 全臺含外島 provider（不覆蓋既有 `output/all_taiwan`）：
+
+```powershell
+pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllTaiwan2026 -SkipDownload
+```
+
+會從已驗證的 2026 主島＋2025 澎湖、金門 GeoTIFF 建立 `output/all_taiwan_2026`；部署目標為 `/data/terrain20M_2026/all_taiwan`。
 
 正式產製縣市、全臺主島與全臺含外島 provider；通常只有需要重建全套展示資料時才用：
 
@@ -117,7 +134,7 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -Tai
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllWithTaiwan
 ```
 
-如果 2025 不分幅全臺主島來源暫時不可用，可手動指定回到縣市 mosaic 診斷流程；這不是正式 2025-only 台灣本島成果：
+如果 2026 不分幅全臺主島來源暫時不可用，可手動指定回到縣市 mosaic 診斷流程；這不是正式 2026-only 台灣本島成果：
 
 ```powershell
 pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -AllWithTaiwan -SkipUnifiedTaiwanSource
@@ -170,10 +187,11 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 5. 如果來源 grid 因 positive NS resolution 不能直接建 VRT，改用 `gdalwarp` 逐檔轉成 north-up GeoTIFF。
 6. 如果遇到 GDAL 無法直接讀取的稀疏 XYZ，先補齊缺格為 `-32768` 再重試。
 7. 將來源合併後轉成 `EPSG:4326` GeoTIFF。
-8. `-TaiwanOnly` 下載 2025 官方不分幅全臺 TIF，轉成 `data/work/taiwan_unified/taiwan_unified-4326.tif`。
-9. 直接用 `taiwan_unified-4326.tif` 產出 `output/taiwan`；NoData 保留，不補、不混。
-10. 澎湖、金門離島 provider 直接使用 2025 官方不分幅離島 GeoTIFF，輸出到 `output/penghu_2025_only`、`output/kinmen_2025_only`。
-11. 用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
+8. `-TaiwanOnly` 下載 2026 官方不分幅全臺 TIF，轉成 `data/work/taiwan_unified_2026/taiwan_unified_2026-4326.tif`。
+9. `-ExportAllTaiwanGeoTiff` 將 2026 主島與已驗證的 2025 澎湖、金門合併成 `output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`；NoData 保留，不補、不混。
+10. `-AllTaiwan2026` 只從該 GeoTIFF 產出獨立 `output/all_taiwan_2026`，不觸碰舊的 `output/all_taiwan`。
+11. 澎湖、金門離島 provider 直接使用 2025 官方不分幅離島 GeoTIFF，輸出到 `output/penghu_2025_only`、`output/kinmen_2025_only`。
+12. 用 Docker 執行 `ctb-tile -f Mesh -p geodetic -C` 產出 quantized-mesh terrain。
 12. 將 `.terrain.gz` 或 gzip 內容的 `.terrain` 正規化成未壓縮 `.terrain`，避免 Web Server 沒送 `Content-Encoding: gzip` 時 Cesium 讀壞。
 13. 使用 raster metadata 回寫 `layer.json` 的實際 `bounds`。
 14. 寫出 `build-manifest.json`，記錄來源、bbox、tile 數、zoom levels、GDAL/Docker/CTB 設定。
@@ -181,17 +199,17 @@ pwsh.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-terrain.ps1 -All
 
 ## 全臺含外島 all_taiwan
 
-`all_taiwan` 不是前端拼接多個縣市，而是產線中建立的合併 provider。若需要重建，來源只允許 2025 `不分幅_全台20MDEM(2025)` 加上 2025 不分幅澎湖、金門；不使用 2024 或 MOI 補洞。
+`all_taiwan` 不是前端拼接多個縣市，而是產線中建立的合併 provider。若需要重建，來源為 2026 `不分幅_全台20MDEM(2026)` 加上已驗證的 2025 不分幅澎湖、金門；不使用 2025 主島、2024 或 MOI 補洞。
 
-`taiwan` 是只含主島的正式 provider；`all_taiwan` 則再加 2025 不分幅澎湖、金門。這樣前端可依需求載入 `terrain/taiwan` 或 `terrain/all_taiwan`，不用在 Cesium 端拼多個 terrain provider。
+`taiwan` 是只含 2026 主島的正式 provider；`all_taiwan` 則再加已驗證的 2025 不分幅澎湖、金門。這樣前端可依需求載入 `terrain/taiwan` 或 `terrain/all_taiwan`，不用在 Cesium 端拼多個 terrain provider。
 
 流程：
 
 1. `-AllWithTaiwan` 會先跑縣市來源，確保縣市有 EPSG:4326 raster 與 bbox；若有指定 `-County`，就只跑指定縣市來源。
-2. 下載並轉換 2025 `不分幅_全台20MDEM(2025)`、`不分幅_澎湖20MDEM(2025)`、`不分幅_金門20MDEM(2025)`。
-3. 用 2025 不分幅全臺主島與 2025 不分幅澎湖、金門建立 VRT。
-4. 先產出 `output/taiwan`，`buildKind` 記為 `taiwan_unified_2025_only`。
-5. 再用同一套 CTB 流程產出 `output/all_taiwan`，`buildKind` 記為 `all_taiwan_unified_2025_only`。
+2. 下載並轉換 2026 `不分幅_全台20MDEM(2026)`，重用已驗證的 2025 `不分幅_澎湖20MDEM(2025)`、`不分幅_金門20MDEM(2025)`。
+3. 用 2026 不分幅全臺主島與 2025 不分幅澎湖、金門建立 VRT。
+4. 先產出 `output/taiwan`，`buildKind` 記為 `taiwan_unified_2026_only`。
+5. 再用同一套 CTB 流程產出 `output/all_taiwan`，`buildKind` 記為 `all_taiwan_unified_2026_mainland_2025_offshore`。
 
 `-FromGrd` 是另一條獨立比對線：`taiwan_from_grd` 只含臺灣本島，由 2025 各縣市分幅 GRD 組成，苗栗與新竹縣直接用 `*_moi_full` 取代 2025 年度分幅；`all_taiwan_from_grd` 則在同一個本島 VRT 外，再加入 2025 官方不分幅澎湖與金門。澎湖、金門仍不使用疑似錯包的 2025 分幅 GRD。
 
