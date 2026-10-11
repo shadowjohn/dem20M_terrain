@@ -1,16 +1,15 @@
 {
   "schemaVersion": 1,
-  "description": "DTM 2025-only 正式來源 CSV registry；由 tools/update-dtm-sources.php 展開成 config/dtm_sources.json。2024 與內政部 OLD 只保留在歷史資料中，不進正式 registry。",
+  "description": "DTM 2026 主島正式來源 CSV registry；全臺成果的澎湖、金門固定沿用已驗證的 2025 不分幅 GeoTIFF，不採 2026 分幅離島來源。",
   "datasets": [
     {
-      "id": "dtm_2025",
-      "label": "2025 DTM",
-      "version": "2025",
+      "id": "dtm_2026",
+      "label": "2026 DTM",
+      "version": "2026",
       "priority": 1,
       "defaultRole": "primary",
-      "dataGovUrl": "https://data.gov.tw/dataset/176927",
-      "alternateDataGovUrl": "https://data.gov.tw/dataset/175239",
-      "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/80E9C878-8674-4BBA-A17D-DE4C5CA3FF26/resource/BCFFC898-20CE-4F9F-8325-23DBAA60061F/download",
+      "dataGovUrl": "https://data.gov.tw/dataset/178729",
+      "csvUrl": "https://opdadm.moi.gov.tw/api/v1/no-auth/resource/api/dataset/B6219841-E247-4743-958D-77FB61067092/resource/D788C60B-33CB-4A84-A438-EC6E8B7060F1/download",
       "enabled": true
     },
     {

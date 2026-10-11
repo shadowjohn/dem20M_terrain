@@ -533,3 +533,10 @@
 - 澎湖 manifest：providerId=penghu_2025_only，buildKind=offshore_2025_only，sourceSrs=EPSG:3825，terrainTileCount=2,993，bbox=119.313858,23.1853253,119.7285263,23.8108387。
 - 金門 manifest：providerId=kinmen_2025_only，buildKind=offshore_2025_only，sourceSrs=EPSG:3825，terrainTileCount=575，bbox=118.2063723,24.382249,118.4834125,24.535152。
 - 最新驗證：`node --test tests\*.test.js` 19 tests 通過；`git diff --check` 無 whitespace error，只有 Git LF/CRLF 提醒。
+
+## 2026-10-11 - 全臺 GeoTIFF（2026 主島＋2025 已驗證離島）SUCCESS
+
+- 來源：2026 `不分幅_全台20MDEM(2026)`（TGOS Product `915aa7e9-d952-4cec-8bf3-aca264254e9b`）加上已驗證的 2025 不分幅澎湖、金門 GeoTIFF。
+- 不採 2026 澎湖、金門分幅；官方 2026 CSV 的澎湖分幅連結仍指向 2025 檔案，僅保留為診斷來源。
+- 輸出：`output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif`。
+- 驗證：EPSG:4326、20,304 × 18,192、Float32、LZW、NoData=-32768；主島（120.993, 23.800）、澎湖（119.566, 23.570）、金門（118.340, 24.440）抽樣皆為有效高程。

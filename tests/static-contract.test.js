@@ -53,29 +53,32 @@ test("county config tracks all 2025 split county TGOS sources", () => {
   assert.equal(byId.kinmen.sourceSrs, "EPSG:3825");
 });
 
-test("DTM source registry defines the 2025-only production policy", () => {
+test("DTM source registry defines the 2026-mainland and trusted-2025-offshore policy", () => {
   const registry = JSON.parse(readText("config/dtm_sources.json"));
   assert.equal(registry.schemaVersion, 1);
-  assert.equal(registry.policy, "2025_ONLY");
+  assert.equal(registry.policy, "2026_MAINLAND_2025_OFFSHORE");
   assert.ok(Array.isArray(registry.datasets));
-  assert.ok(registry.datasets.some((dataset) => dataset.dataGovUrl === "https://data.gov.tw/dataset/176927"));
+  assert.ok(registry.datasets.some((dataset) => dataset.dataGovUrl === "https://data.gov.tw/dataset/178729"));
+  assert.ok(!registry.datasets.some((dataset) => dataset.dataGovUrl === "https://data.gov.tw/dataset/176927"));
   assert.ok(!registry.datasets.some((dataset) => dataset.dataGovUrl === "https://data.gov.tw/dataset/169807"));
   assert.ok(!registry.datasets.some((dataset) => dataset.dataGovUrl === "https://data.gov.tw/dataset/35430"));
 
   const sources = registry.sources;
-  const enabledPrimary2025CountyIds = sources
-    .filter((source) => source.enabled && source.version === "2025" && source.priority === 1 && source.role === "primary")
+  const enabledPrimary2026CountyIds = sources
+    .filter((source) => source.enabled && source.version === "2026" && source.priority === 1 && source.role === "primary")
     .map((source) => source.countyId)
     .sort();
 
-  assert.deepEqual(enabledPrimary2025CountyIds, expectedCountyIds);
+  assert.deepEqual(enabledPrimary2026CountyIds, expectedCountyIds.filter((id) => id !== "penghu" && id !== "kinmen"));
 
+  assert.equal(sources.some((source) => source.enabled && source.version === "2025"), false);
   assert.equal(sources.some((source) => source.enabled && source.version === "2024"), false);
   assert.equal(sources.some((source) => source.enabled && source.version === "OLD"), false);
 
   assert.ok(sources.some((source) => source.id === "dtm_global_reserved" && source.priority === 4 && source.enabled === false));
-  assert.ok(sources.some((source) => source.id === "dtm_2025_penghu_split_diagnostic" && source.role === "diagnostic"));
-  assert.ok(sources.some((source) => source.id === "dtm_2025_taiwan_unified" && source.downloadEnabled === true && source.enabled === false));
+  assert.ok(sources.some((source) => source.id === "dtm_2026_penghu_split_diagnostic" && source.role === "diagnostic"));
+  assert.ok(sources.some((source) => source.id === "dtm_2026_kinmen_split_diagnostic" && source.role === "diagnostic"));
+  assert.ok(sources.some((source) => source.id === "dtm_2026_taiwan_unified" && source.downloadEnabled === true && source.enabled === false && /915aa7e9-d952-4cec-8bf3-aca264254e9b/.test(source.url)));
 
   for (const source of sources) {
     assert.match(source.id, /^dtm_/);
@@ -122,10 +125,11 @@ test("build script contains the repeatable terrain pipeline", () => {
   assert.doesNotMatch(script, /ValidateSet\("taichung", "taoyuan", "newtaipei"\)/);
 });
 
-test("build script builds Taiwan mainland from the official 2025 unified DEM without gapfill mixing", () => {
+test("build script builds 2026 mainland with trusted 2025 offshore sources without gapfill mixing", () => {
   const script = readText("tools/build-terrain.ps1");
 
   assert.match(script, /\[switch\] \$TaiwanOnly/);
+  assert.match(script, /\[switch\] \$ExportAllTaiwanGeoTiff/);
   assert.match(script, /\[switch\] \$AllWithTaiwan/);
   assert.match(script, /\[switch\] \$FromGrd/);
   assert.match(script, /\$TaiwanProviderId = "all_taiwan"/);
@@ -143,13 +147,15 @@ test("build script builds Taiwan mainland from the official 2025 unified DEM wit
   assert.match(script, /output\/all_taiwan/);
   assert.match(script, /output\/\$MainTaiwanProviderId/);
   assert.match(script, /全臺主島 terrain 產製完成/);
-  assert.match(script, /不分幅_全台20MDEM\(2025\)/);
+  assert.match(script, /不分幅_全台20MDEM\(2026\)/);
   assert.match(script, /不分幅_澎湖20MDEM\(2025\)/);
   assert.match(script, /不分幅_金門20MDEM\(2025\)/);
-  assert.match(script, /528530be-0710-431e-954e-2f2f5e98b0c5/);
+  assert.match(script, /915aa7e9-d952-4cec-8bf3-aca264254e9b/);
   assert.match(script, /47910269-7315-4cd2-9101-7cdf524b47f5/);
   assert.match(script, /0e018335-80f1-4489-990c-ecf2bef1a9b6/);
   assert.match(script, /function Invoke-UnifiedGeoTiffSourceBuild/);
+  assert.match(script, /function Export-AllTaiwanGeoTiff/);
+  assert.match(script, /all_taiwan_20m_2026_mainland_2025_offshore_epsg4326\.tif/);
   assert.match(script, /function Get-OffshoreUnifiedSourceConfig/);
   assert.match(script, /providerOutputId = "penghu_2025_only"/);
   assert.match(script, /providerOutputId = "kinmen_2025_only"/);
@@ -164,8 +170,8 @@ test("build script builds Taiwan mainland from the official 2025 unified DEM wit
   assert.match(script, /Invoke-AllTaiwanBuild -CountyConfigs \$taiwanSourceCounties/);
   assert.match(script, /Invoke-TaiwanMainBuild -CountyConfigs \$taiwanSourceCounties/);
   assert.match(script, /SkipUnifiedTaiwanSource/);
-  assert.match(script, /taiwan_unified_2025_only/);
-  assert.match(script, /all_taiwan_unified_2025_only/);
+  assert.match(script, /taiwan_unified_2026_only/);
+  assert.match(script, /all_taiwan_unified_2026_mainland_2025_offshore/);
   assert.doesNotMatch(script, /taiwan_unified_split_gapfill/);
   assert.doesNotMatch(script, /taiwan_unified_split_moi_gapfill/);
   assert.doesNotMatch(script, /taiwan_unified_split_moi_full_gapfill/);
@@ -199,7 +205,7 @@ test("build script builds Taiwan mainland from the official 2025 unified DEM wit
   assert.doesNotMatch(script, /UseMoiForCounty \+ -AllWithTaiwan/);
   assert.match(script, /避免縣市邊界 NoData 牆/);
   assert.match(script, /來源 NoData 不內插補洞/);
-  assert.match(script, /2025-only/);
+  assert.match(script, /2026 主島 \+ 2025 已驗證離島/);
   assert.match(script, /澎湖、金門仍強制使用不分幅離島來源/);
   assert.match(script, /foreach \(\$offshoreSourceConfig in \$UnifiedOffshoreSourceConfigs\)/);
   assert.match(script, /正式 terrain 禁止使用 2025 分幅錯包來源/);
@@ -266,7 +272,7 @@ test("build script checks Docker daemon before long terrain work", () => {
   assert.match(script, /function Assert-DockerDaemon/);
   assert.match(script, /docker version/);
   assert.match(script, /Docker Desktop daemon 尚未啟動/);
-  assert.match(script, /if \(-not \$ValidateOnly\) \{\s+Assert-DockerDaemon\s+\}/);
+  assert.match(script, /if \(-not \$ValidateOnly -and -not \$ExportAllTaiwanGeoTiff\) \{\s+Assert-DockerDaemon\s+\}/);
 });
 
 test("build script completes sparse XYZ grids before GDAL fallback conversion", () => {
@@ -316,7 +322,7 @@ test("DTM source updater and downloader expose annual source workflow", () => {
   assert.equal(datasets.schemaVersion, 1);
   assert.deepEqual(
     datasets.datasets.filter((dataset) => dataset.enabled).map((dataset) => dataset.version),
-    ["2025"]
+    ["2026"]
   );
   assert.deepEqual(
     datasets.datasets.filter((dataset) => !dataset.enabled).map((dataset) => dataset.version),
@@ -356,15 +362,16 @@ test("check_grd exposes DTM coverage mode without replacing polygon checks", () 
 test("documentation explains sources, run, output, Cesium, IIS, and verification", () => {
   const readme = readText("README.md");
 
-  assert.match(readme, /https:\/\/data\.gov\.tw\/dataset\/176927/);
-  assert.match(readme, /https:\/\/3wa\.tw\/mypaper\/\?uid=shadow&mode=view&id=2695/);
-  assert.match(readme, /2025年版全臺灣20公尺網格數值地形模型DTM資料/);
-  assert.match(readme, /不分幅_全台20MDEM\(2025\)/);
+  assert.match(readme, /https:\/\/data\.gov\.tw\/dataset\/178729/);
+  assert.match(readme, /2026年版全臺灣20公尺網格數值地形模型DTM資料/);
+  assert.match(readme, /不分幅_全台20MDEM\(2026\)/);
   assert.match(readme, /不分幅_澎湖20MDEM\(2025\)/);
   assert.match(readme, /不分幅_金門20MDEM\(2025\)/);
-  assert.match(readme, /2025_ONLY/);
-  assert.match(readme, /taiwan_unified_2025_only/);
-  assert.match(readme, /all_taiwan_unified_2025_only/);
+  assert.match(readme, /2026_MAINLAND_2025_OFFSHORE/);
+  assert.match(readme, /taiwan_unified_2026_only/);
+  assert.match(readme, /all_taiwan_unified_2026_mainland_2025_offshore/);
+  assert.match(readme, /-ExportAllTaiwanGeoTiff/);
+  assert.match(readme, /all_taiwan_20m_2026_mainland_2025_offshore_epsg4326\.tif/);
   assert.match(readme, /pwsh\.exe -NoProfile -ExecutionPolicy Bypass -File \.\\tools\\build-terrain\.ps1 -TaiwanOnly/);
   assert.match(readme, /output\/all_taiwan/);
   assert.match(readme, /output\/taiwan_from_grd/);
@@ -375,7 +382,7 @@ test("documentation explains sources, run, output, Cesium, IIS, and verification
   assert.match(readme, /build-manifest\.json/);
   assert.match(readme, /全臺含外島 all_taiwan/);
   assert.match(readme, /SkipUnifiedTaiwanSource/);
-  assert.match(readme, /官方 2025 有洞就有洞/);
+  assert.match(readme, /官方 2026 主島有洞就有洞/);
   assert.match(readme, /output\/taichung/);
   assert.match(readme, /output\/penghu_2025_only/);
   assert.match(readme, /output\/kinmen_2025_only/);
@@ -386,7 +393,7 @@ test("documentation explains sources, run, output, Cesium, IIS, and verification
   assert.match(readme, /Apache \/ Nginx \/ IIS/);
   assert.match(readme, /application\/vnd\.quantized-mesh/);
   assert.match(readme, /node --test tests\/\*\.test\.js/);
-  assert.match(readme, /DTM 2025-Only Registry/);
+  assert.match(readme, /DTM 2026 主島 Registry/);
   assert.match(readme, /tools[\\\/]build-dtm-catalog\.php/);
   assert.match(readme, /tools[\\\/]update-dtm-sources\.php/);
   assert.match(readme, /tools[\\\/]download-dtm-sources\.php/);

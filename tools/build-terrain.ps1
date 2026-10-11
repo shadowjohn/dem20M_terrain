@@ -6,6 +6,7 @@ param(
     [switch] $All,
     [switch] $AllWithTaiwan,
     [switch] $TaiwanOnly,
+    [switch] $ExportAllTaiwanGeoTiff,
     [switch] $FromGrd,
     [switch] $ValidateOnly,
     [switch] $SkipDownload,
@@ -37,19 +38,19 @@ $TaiwanProviderId = "all_taiwan"
 $MainTaiwanProviderId = "taiwan"
 $FromGrdTaiwanProviderId = "taiwan_from_grd"
 $FromGrdAllTaiwanProviderId = "all_taiwan_from_grd"
-$UnifiedTaiwanSourceId = "taiwan_unified"
+$UnifiedTaiwanSourceId = "taiwan_unified_2026"
 $UnifiedTaiwanSourceConfig = [pscustomobject]@{
     id = $UnifiedTaiwanSourceId
     providerId = ""
-    name = "不分幅_全台20MDEM(2025)"
-    zipName = "taiwan_unified-20mdem-2025.zip"
-    url = "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/528530be-0710-431e-954e-2f2f5e98b0c5/不分幅_全台20MDEM(2025).zip"
+    name = "不分幅_全台20MDEM(2026)"
+    zipName = "taiwan_unified-20mdem-2026.zip"
+    url = "https://www.tgos.tw:443/MDE/VirtualDir_TC/Product/915aa7e9-d952-4cec-8bf3-aca264254e9b/不分幅_全台20MDEM(2026).zip"
     sourceSrs = "EPSG:3826"
     targetSrs = "EPSG:4326"
     outputDir = "output/$UnifiedTaiwanSourceId"
-    expectedBytes = 268985841
+    expectedBytes = 262830080
     sourceNoData = "-32767"
-    buildKind = "all_taiwan_unified_source"
+    buildKind = "taiwan_unified_2026_source"
 }
 $UnifiedOffshoreSourceConfigs = @(
     [pscustomobject]@{
@@ -1554,6 +1555,80 @@ function Invoke-UnifiedTaiwanSourceBuild {
     return (Invoke-UnifiedGeoTiffSourceBuild -SourceConfig $UnifiedTaiwanSourceConfig)
 }
 
+function Export-AllTaiwanGeoTiff {
+    param(
+        [Parameter(Mandatory)][string] $MainlandRaster,
+        [Parameter(Mandatory)][hashtable] $OffshoreRasters
+    )
+
+    $workPath = Join-Path $RepoRoot "data/work/all_taiwan_2026_mainland_2025_offshore"
+    $outputPath = Join-Path $RepoRoot "output/all_taiwan_20m_2026_mainland_2025_offshore_epsg4326.tif"
+    $temporaryOutputPath = "$outputPath.tmp-$RunStamp"
+    New-Directory -Path $workPath
+    New-Directory -Path (Split-Path -Parent $outputPath)
+
+    if ((Test-Path -LiteralPath $outputPath) -and -not $ForceRebuild) {
+        Write-Log "[7/8] 2026 全臺 GeoTIFF 已存在，跳過匯出：$outputPath"
+        return $outputPath
+    }
+    if (-not (Test-Path -LiteralPath $MainlandRaster)) {
+        throw "缺少 2026 不分幅全臺主島 EPSG:4326 GeoTIFF：$MainlandRaster"
+    }
+
+    $sourceRasters = @((Get-Item -LiteralPath $MainlandRaster))
+    foreach ($offshoreSourceConfig in $UnifiedOffshoreSourceConfigs) {
+        if (-not $OffshoreRasters.ContainsKey($offshoreSourceConfig.providerId)) {
+            throw "缺少已驗證的 2025 $($offshoreSourceConfig.name) EPSG:4326 GeoTIFF"
+        }
+        $offshoreRaster = [string]$OffshoreRasters[$offshoreSourceConfig.providerId]
+        if (-not (Test-Path -LiteralPath $offshoreRaster)) {
+            throw "找不到已驗證的 2025 $($offshoreSourceConfig.name) EPSG:4326 GeoTIFF：$offshoreRaster"
+        }
+        $sourceRasters += (Get-Item -LiteralPath $offshoreRaster)
+    }
+
+    $sourceList = Join-Path $workPath "all_taiwan_2026_mainland_2025_offshore-sources.txt"
+    $sourceVrt = Join-Path $workPath "all_taiwan_2026_mainland_2025_offshore.vrt"
+    $sourceRasters.FullName | Set-Content -LiteralPath $sourceList -Encoding utf8
+    $gdalBuildVrt = Get-RequiredCommand -Name "gdalbuildvrt"
+    Invoke-ExternalCommand -FilePath $gdalBuildVrt -ArgumentList @(
+        "-overwrite",
+        "-a_srs", "EPSG:4326",
+        "-srcnodata", "-32768",
+        "-vrtnodata", "-32768",
+        "-input_file_list", $sourceList,
+        $sourceVrt
+    ) -ProgressMessage "[5/8] 2026 主島 + 2025 已驗證離島 gdalbuildvrt 建立全臺 GeoTIFF 來源"
+
+    if (Test-Path -LiteralPath $temporaryOutputPath) {
+        Remove-Item -LiteralPath $temporaryOutputPath -Force
+    }
+    $gdalWarp = Get-RequiredCommand -Name "gdalwarp"
+    Invoke-ExternalCommand -FilePath $gdalWarp -ArgumentList @(
+        "-overwrite",
+        "-t_srs", "EPSG:4326",
+        "-r", "bilinear",
+        "-ot", "Float32",
+        "-srcnodata", "-32768",
+        "-dstnodata", "-32768",
+        "-multi",
+        "-wo", "NUM_THREADS=ALL_CPUS",
+        "-co", "TILED=YES",
+        "-co", "COMPRESS=LZW",
+        $sourceVrt,
+        $temporaryOutputPath
+    ) -ProgressMessage "[6/8] 2026 主島 + 2025 已驗證離島 gdalwarp 匯出 GeoTIFF"
+
+    $gdalInfo = Get-RequiredCommand -Name "gdalinfo"
+    Invoke-ExternalCommand -FilePath $gdalInfo -ArgumentList @($temporaryOutputPath) -ProgressMessage "[7/8] 驗證全臺 GeoTIFF"
+    if (Test-Path -LiteralPath $outputPath) {
+        Remove-Item -LiteralPath $outputPath -Force
+    }
+    Move-Item -LiteralPath $temporaryOutputPath -Destination $outputPath
+    Write-Log "[7/8] 2026 主島 + 2025 已驗證離島 GeoTIFF 完成：$outputPath"
+    return $outputPath
+}
+
 function Invoke-TaiwanMainBuild {
     param(
         [Parameter(Mandatory)] $CountyConfigs,
@@ -1565,14 +1640,14 @@ function Invoke-TaiwanMainBuild {
         id = $MainTaiwanProviderId
         name = "全臺主島"
         zipName = ""
-        url = if ($UnifiedTaiwanRaster) { "taiwan-unified-mainland-2025-only" } else { "19-county-mainland-epsg4326-vrt" }
+        url = if ($UnifiedTaiwanRaster) { "taiwan-unified-mainland-2026-only" } else { "19-county-mainland-epsg4326-vrt" }
         sourceSrs = "EPSG:4326"
         targetSrs = "EPSG:4326"
         outputDir = $providerOutputDir
         expectedBytes = 0
     }
-    $buildKind = if ($UnifiedTaiwanRaster) { "taiwan_unified_2025_only" } else { "taiwan_19_county" }
-    $sourceMode = if ($UnifiedTaiwanRaster) { "2025-only 不分幅全臺主島；NoData 保留，不用縣市分幅、2024 或 MOI 補洞" } else { "19 個主島縣市 EPSG:4326 GeoTIFF" }
+    $buildKind = if ($UnifiedTaiwanRaster) { "taiwan_unified_2026_only" } else { "taiwan_19_county" }
+    $sourceMode = if ($UnifiedTaiwanRaster) { "2026-only 不分幅全臺主島；NoData 保留，不用縣市分幅、2025、2024 或 MOI 補洞" } else { "19 個主島縣市 EPSG:4326 GeoTIFF" }
 
     Write-Log "[1/8] 全臺主島 檢查 $sourceMode"
     if ($ValidateOnly) {
@@ -1645,9 +1720,9 @@ function Invoke-AllTaiwanBuild {
         outputDir = $providerOutputDir
         expectedBytes = 0
     }
-    $buildKind = if ($UnifiedTaiwanRaster) { "all_taiwan_unified_2025_only" } else { "all_taiwan" }
+    $buildKind = if ($UnifiedTaiwanRaster) { "all_taiwan_unified_2026_mainland_2025_offshore" } else { "all_taiwan" }
 
-    $sourceMode = if ($UnifiedTaiwanRaster) { "2025-only 不分幅全臺主島 + 2025 不分幅離島；NoData 保留，不用縣市分幅、2024 或 MOI 補洞" } else { "21 個縣市 EPSG:4326 GeoTIFF" }
+    $sourceMode = if ($UnifiedTaiwanRaster) { "2026 主島 + 2025 已驗證離島；NoData 保留，不用縣市分幅、2025 主島、2024 或 MOI 補洞" } else { "21 個縣市 EPSG:4326 GeoTIFF" }
     Write-Log "[1/8] 全臺含外島 檢查 $sourceMode"
     if ($ValidateOnly) {
         Write-Log "[1/8] 全臺含外島 validate-only：正式產製時會從 $sourceMode 建立 all_taiwan"
@@ -1983,7 +2058,7 @@ function Main {
         Write-Log "工具確認：$tool => $path"
     }
 
-    if (-not $SkipFillNoData -and $FillDistancePixels -gt 0) {
+    if (-not $ExportAllTaiwanGeoTiff -and -not $SkipFillNoData -and $FillDistancePixels -gt 0) {
         $gdalPython = Get-GdalPythonCommand
         Write-Log "工具確認：GDAL Python => $gdalPython"
     }
@@ -1992,18 +2067,32 @@ function Main {
     Write-Log "Docker 檢查：$dockerText"
     $dockerMissing = ($dockerText -eq "docker unavailable")
 
-    if (-not $ValidateOnly) {
+    if (-not $ValidateOnly -and -not $ExportAllTaiwanGeoTiff) {
         Assert-DockerDaemon
     }
 
+    if ($ExportAllTaiwanGeoTiff -and ($All -or $AllWithTaiwan -or $TaiwanOnly -or $FromGrd -or $ValidateOnly -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
+        throw "-ExportAllTaiwanGeoTiff 只匯出 2026 主島 + 2025 已驗證離島 GeoTIFF；請不要搭配 terrain、驗證、補洞或縣市參數"
+    }
     if ($FromGrd -and -not $AllWithTaiwan) {
         throw "-FromGrd 需要搭配 -AllWithTaiwan，會建立 taiwan_from_grd 與 all_taiwan_from_grd"
     }
     if ($TaiwanOnly -and ($All -or $AllWithTaiwan -or $FromGrd -or $UseMoiForCounty -or $SkipUnifiedTaiwanSource -or $hasRequestedCountyIds)) {
-        throw "-TaiwanOnly 只建立 output/taiwan，固定使用 2025 不分幅全臺主島來源；請不要搭配 -All、-AllWithTaiwan、-FromGrd、-UseMoiForCounty、-SkipUnifiedTaiwanSource 或 -County"
+        throw "-TaiwanOnly 只建立 output/taiwan，固定使用 2026 不分幅全臺主島來源；請不要搭配 -All、-AllWithTaiwan、-FromGrd、-UseMoiForCounty、-SkipUnifiedTaiwanSource 或 -County"
     }
     if ($FromGrd -and $hasRequestedCountyIds) {
         Write-Log "-FromGrd 固定建立完整 taiwan_from_grd/all_taiwan_from_grd，忽略 -County 篩選並掃描全部縣市來源"
+    }
+
+    if ($ExportAllTaiwanGeoTiff) {
+        $unifiedTaiwanRaster = Invoke-UnifiedTaiwanSourceBuild
+        $unifiedOffshoreRasterByCounty = @{}
+        foreach ($offshoreSourceConfig in $UnifiedOffshoreSourceConfigs) {
+            $unifiedOffshoreRasterByCounty[$offshoreSourceConfig.providerId] = Invoke-UnifiedGeoTiffSourceBuild -SourceConfig $offshoreSourceConfig
+        }
+        $exportPath = Export-AllTaiwanGeoTiff -MainlandRaster $unifiedTaiwanRaster -OffshoreRasters $unifiedOffshoreRasterByCounty
+        Write-Log "全臺 GeoTIFF 匯出結束：$exportPath"
+        return
     }
 
     if ($TaiwanOnly) {
@@ -2017,7 +2106,7 @@ function Main {
                 $providerConfig = [pscustomobject]@{
                     id = $MainTaiwanProviderId
                     name = "全臺主島"
-                    url = "taiwan-unified-mainland-2025-only"
+                    url = "taiwan-unified-mainland-2026-only"
                     sourceSrs = "EPSG:4326"
                     targetSrs = "EPSG:4326"
                     outputDir = "output/$MainTaiwanProviderId"
@@ -2073,7 +2162,7 @@ function Main {
 
     $useSubsetForAllWithTaiwan = ($AllWithTaiwan -and $hasRequestedCountyIds -and -not $All -and -not $FromGrd)
     $taiwanSourceCounties = if ($useSubsetForAllWithTaiwan) {
-        Write-Log "AllWithTaiwan 指定縣市模式：只重建 $($selected.id -join ', ')；全臺仍使用 2025-only 不分幅主島與不分幅離島來源"
+        Write-Log "AllWithTaiwan 指定縣市模式：只重建 $($selected.id -join ', ')；全臺仍使用 2026 主島與 2025 已驗證離島來源"
         $selected
     } else {
         $counties
